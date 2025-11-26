@@ -8,7 +8,10 @@ export default async function handler(
     const client = await db.connect();
 
     try {
-        // Ensure table exists (simple migration strategy for this demo)
+        // Ensure uuid extension FIRST (needed for uuid_generate_v4())
+        await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`;
+
+        // Then create table that uses the extension
         await client.sql`
       CREATE TABLE IF NOT EXISTS stories (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -23,8 +26,6 @@ export default async function handler(
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
-        // Ensure uuid extension for uuid_generate_v4
-        await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`;
 
         if (request.method === 'GET') {
             const { rows } = await client.sql`SELECT * FROM stories ORDER BY created_at DESC;`;
