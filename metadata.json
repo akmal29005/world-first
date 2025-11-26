@@ -1,0 +1,5 @@
+{
+  "name": "The Map of Firsts",
+  "description": "An interactive 3D globe visualization where users drop anonymous pins marking significant 'firsts' in their lives, populated with AI-generated examples to demonstrate the concept of a shared geography of emotion.",
+  "requestFramePermissions": []
+}
