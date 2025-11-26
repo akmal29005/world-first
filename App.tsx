@@ -4,15 +4,12 @@ import StoryCard from './components/StoryCard';
 import StoryForm from './components/StoryForm';
 import FilterBar from './components/FilterBar';
 import { Story, Category } from './types';
-import { generateSeedStories } from './services/geminiService';
 
 interface NewPinState {
   lat: number;
   lng: number;
   country?: string;
 }
-
-const USER_STORIES_KEY = 'map_of_firsts_user_stories';
 
 const App: React.FC = () => {
   const [stories, setStories] = useState<Story[]>([]);
@@ -21,14 +18,13 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [newPinLocation, setNewPinLocation] = useState<NewPinState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize with DB data and Seed data
+  // Initialize with DB data and Static stories
   useEffect(() => {
     const init = async () => {
       let dbStories: Story[] = [];
 
-      // 1. Fetch from Database (Vercel Postgres)
+      // 1. Fetch from Database (Neon via Vercel Postgres)
       try {
         const res = await fetch('/api/stories');
         if (res.ok) {
@@ -40,10 +36,10 @@ const App: React.FC = () => {
         console.error("Error fetching stories", e);
       }
 
-      // 2. Static/Seed Stories (Client-side)
+      // 2. Static Stories (Client-side fallback)
       const staticStories: Story[] = [
         {
-          id: 'static-2',
+          id: 'static-1',
           category: Category.FIRST_OCEAN,
           year: 2005,
           text: "I thought it would be cold, but it felt like a warm bath. I never wanted to leave.",
@@ -55,23 +51,8 @@ const App: React.FC = () => {
         }
       ];
 
-      // Set initial state
+      // Combine database and static stories
       setStories([...dbStories, ...staticStories]);
-
-      // 3. Fetch AI generated ones (optional, maybe we don't need this every time if we have DB?)
-      // Let's keep it for "filling the map" feel
-      try {
-        const seed = await generateSeedStories(5); // Reduced count
-        setStories(prev => {
-          const existingIds = new Set(prev.map(s => s.id));
-          const newSeeds = seed.filter(s => !existingIds.has(s.id));
-          return [...prev, ...newSeeds];
-        });
-      } catch (err) {
-        console.error("Failed to load seed stories", err);
-      } finally {
-        setIsLoading(false);
-      }
     };
     init();
   }, []);
@@ -112,13 +93,13 @@ const App: React.FC = () => {
         setStories(prev => prev.map(s => s.id === tempId ? savedStory : s));
         setSelectedStory(savedStory);
       } else {
-        console.error("Failed to save story");
-        // Revert on failure? Or just alert.
-        alert("Failed to save story to cloud. It may disappear on refresh.");
+        const errorData = await res.json();
+        console.error("Failed to save story", errorData);
+        alert(`Failed to save story: ${errorData.details || errorData.error || 'Unknown error'}`);
       }
     } catch (e) {
       console.error("Error saving story", e);
-      alert("Error saving story.");
+      alert(`Error saving story: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -168,12 +149,6 @@ const App: React.FC = () => {
             A geography of emotion. Click a light to read a story, or add your own to the collective memory.
           </p>
         </div>
-        {isLoading && (
-          <div className="flex items-center gap-2 text-neon-blue animate-pulse">
-            <span className="w-2 h-2 rounded-full bg-neon-blue"></span>
-            <span className="text-xs uppercase tracking-widest">Discovering Memories...</span>
-          </div>
-        )}
       </div>
 
       {/* Instruction Toast for Adding Mode - Moved to TOP CENTER */}
