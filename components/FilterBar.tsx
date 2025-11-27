@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Category } from '../types';
 
 interface FilterBarProps {
@@ -10,85 +10,239 @@ interface FilterBarProps {
   onSearchChange: (query: string) => void;
 }
 
-const FilterBar: React.FC<FilterBarProps> = ({ 
-  selected, 
-  onSelect, 
-  onAddClick, 
-  isAddingMode, 
-  searchQuery, 
-  onSearchChange 
+const FilterBar: React.FC<FilterBarProps> = ({
+  selected,
+  onSelect,
+  onAddClick,
+  isAddingMode,
+  searchQuery,
+  onSearchChange
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
-    <div className="absolute bottom-6 left-4 right-4 z-40 flex flex-col items-center pointer-events-none">
-      
-      {/* Container: Stacked on mobile, Row on desktop */}
-      <div className="pointer-events-auto w-full max-w-5xl flex flex-col gap-3 md:flex-row md:items-center md:bg-slate-900/80 md:backdrop-blur-xl md:p-2 md:rounded-full md:border md:border-white/10 md:shadow-2xl transition-all">
-        
-        {/* 1. Add Button (Mobile: Top, Desktop: Left) */}
+    <>
+      {/* MOBILE: Hamburger Menu (< 768px) */}
+      <div className="md:hidden absolute top-6 right-4 z-50 pointer-events-auto">
+        {/* Tooltip - Only show when menu is closed */}
+        {!isMenuOpen && (
+          <div className="absolute -bottom-10 right-0 bg-slate-900/95 text-gray-300 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap backdrop-blur-md border border-white/10 shadow-lg pointer-events-none">
+            Click to add stories
+          </div>
+        )}
+
         <button
-          onClick={onAddClick}
-          className={`
-            md:order-1 px-6 py-3 md:py-2 rounded-full font-bold text-sm tracking-widest transition-all duration-300 shadow-lg whitespace-nowrap
-            flex items-center justify-center gap-2
-            ${isAddingMode 
-              ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20' 
-              : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
-            }`}
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className="p-3 bg-slate-900/90 backdrop-blur-md rounded-full border border-white/10 shadow-lg hover:bg-slate-800 transition-all relative group"
+          aria-label="Toggle menu to add stories and search"
+          title="Click to add stories"
         >
-          {isAddingMode ? (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              CANCEL
-            </>
+          {isMenuOpen ? (
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-              ADD STORY
-            </>
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           )}
         </button>
 
-        {/* 2. Search Bar (Mobile: Middle, Desktop: Middle) */}
-        <div className="md:order-2 flex-1 relative group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search stories, cities, countries..."
-            className="block w-full pl-10 pr-3 py-3 md:py-2 border border-white/10 rounded-full leading-5 bg-slate-900/90 md:bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue sm:text-sm backdrop-blur-md shadow-lg md:shadow-none transition-all"
-          />
-        </div>
-
-        {/* 3. Filters (Mobile: Bottom, Desktop: Right) */}
-        <div className="md:order-3 flex gap-2 overflow-x-auto pb-2 md:pb-0 pt-1 md:pt-0 max-w-full custom-scrollbar mask-linear-fade md:mask-none">
-           {/* Mobile Background for Filters */}
-           <div className="md:hidden absolute inset-0 bg-gradient-to-r from-slate-900/0 via-slate-900/0 to-slate-900/0 pointer-events-none"></div>
-           
-           <div className="flex gap-2 px-1 md:px-0 bg-slate-900/80 md:bg-transparent backdrop-blur-md md:backdrop-blur-none p-2 md:p-0 rounded-2xl md:rounded-none border border-white/10 md:border-none shadow-lg md:shadow-none">
-              <FilterButton 
-                active={selected === 'ALL'} 
-                onClick={() => onSelect('ALL')} 
-                label="All" 
+        {/* Mobile Menu Dropdown */}
+        {isMenuOpen && (
+          <div className="absolute top-16 right-0 w-80 max-w-[calc(100vw-2rem)] bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl p-4 space-y-4 pointer-events-auto">
+            {/* Search Bar */}
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search stories..."
+                className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-lg leading-5 bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue text-sm"
               />
-              <div className="w-px bg-white/10 mx-1 h-4 self-center hidden md:block"></div>
-              {Object.values(Category).map((cat) => (
-                <FilterButton 
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 uppercase tracking-wider font-bold px-1">Filters</p>
+              <div className="flex flex-wrap gap-2">
+                <FilterButton
+                  active={selected === 'ALL'}
+                  onClick={() => { onSelect('ALL'); setIsMenuOpen(false); }}
+                  label="All"
+                />
+                {Object.values(Category).map((cat) => (
+                  <FilterButton
                     key={cat}
-                    active={selected === cat} 
-                    onClick={() => onSelect(cat)} 
-                    label={cat.replace('First ', '')} 
+                    active={selected === cat}
+                    onClick={() => { onSelect(cat); setIsMenuOpen(false); }}
+                    label={cat.replace('First ', '')}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Add Story Button */}
+            <button
+              onClick={() => { onAddClick(); setIsMenuOpen(false); }}
+              className={`
+                w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg
+                flex items-center justify-center gap-2
+                ${isAddingMode
+                  ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                  : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
+                }`}
+            >
+              {isAddingMode ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  CANCEL
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  ADD STORY
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* TABLET/IPAD: Top Bar (768px - 1024px) */}
+      <div className="hidden md:block lg:hidden absolute top-6 left-4 right-4 z-40 pointer-events-none">
+        <div className="pointer-events-auto bg-slate-900/90 backdrop-blur-xl p-3 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="flex flex-col gap-3">
+            {/* Top Row: Search + Add Button */}
+            <div className="flex gap-3 items-center">
+              <div className="flex-1 relative group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Search stories, cities, countries..."
+                  className="block w-full pl-10 pr-3 py-2.5 border border-white/10 rounded-lg leading-5 bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue text-sm"
+                />
+              </div>
+              <button
+                onClick={onAddClick}
+                className={`
+                  px-5 py-2.5 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg whitespace-nowrap
+                  flex items-center gap-2
+                  ${isAddingMode
+                    ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                    : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
+                  }`}
+              >
+                {isAddingMode ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    CANCEL
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    ADD STORY
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Bottom Row: Filters */}
+            <div className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Filters:</span>
+              <FilterButton
+                active={selected === 'ALL'}
+                onClick={() => onSelect('ALL')}
+                label="All"
+              />
+              <div className="w-px bg-white/10 h-4"></div>
+              {Object.values(Category).map((cat) => (
+                <FilterButton
+                  key={cat}
+                  active={selected === cat}
+                  onClick={() => onSelect(cat)}
+                  label={cat.replace('First ', '')}
                 />
               ))}
-           </div>
+            </div>
+          </div>
         </div>
-
       </div>
-    </div>
+
+      {/* DESKTOP: Bottom Bar (> 1024px) */}
+      <div className="hidden lg:block absolute bottom-6 left-4 right-4 z-40 pointer-events-none">
+        <div className="pointer-events-auto max-w-5xl mx-auto flex items-center bg-slate-900/80 backdrop-blur-xl p-2 rounded-full border border-white/10 shadow-2xl gap-3">
+          {/* Add Button */}
+          <button
+            onClick={onAddClick}
+            className={`
+              px-6 py-2 rounded-full font-bold text-sm tracking-widest transition-all duration-300 shadow-lg whitespace-nowrap
+              flex items-center gap-2
+              ${isAddingMode
+                ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
+              }`}
+          >
+            {isAddingMode ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                CANCEL
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                ADD STORY
+              </>
+            )}
+          </button>
+
+          {/* Search Bar */}
+          <div className="flex-1 relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search stories, cities, countries..."
+              className="block w-full pl-10 pr-3 py-2 border border-white/10 rounded-full leading-5 bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue text-sm"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-2 items-center">
+            <FilterButton
+              active={selected === 'ALL'}
+              onClick={() => onSelect('ALL')}
+              label="All"
+            />
+            <div className="w-px bg-white/10 h-4"></div>
+            {Object.values(Category).map((cat) => (
+              <FilterButton
+                key={cat}
+                active={selected === cat}
+                onClick={() => onSelect(cat)}
+                label={cat.replace('First ', '')}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -102,8 +256,8 @@ const FilterButton: React.FC<FilterButtonProps> = ({ active, onClick, label }) =
   <button
     onClick={onClick}
     className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 border border-transparent
-      ${active 
-        ? 'bg-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] border-white/20' 
+      ${active
+        ? 'bg-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] border-white/20'
         : 'text-gray-400 hover:text-white hover:bg-white/5'
       }`}
   >
