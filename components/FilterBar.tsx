@@ -8,6 +8,7 @@ interface FilterBarProps {
   isAddingMode: boolean;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onRandomStory: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({
@@ -16,7 +17,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onAddClick,
   isAddingMode,
   searchQuery,
-  onSearchChange
+  onSearchChange,
+  onRandomStory
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -87,6 +89,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Random Story Button (Mobile) */}
+            <button
+              onClick={() => { onRandomStory(); setIsMenuOpen(false); }}
+              className="w-full px-6 py-3 bg-neon-blue hover:bg-neon-blue/80 text-white rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
+            >
+              <span>🎲</span>
+              RANDOM STORY
+            </button>
 
             {/* Add Story Button */}
             <button

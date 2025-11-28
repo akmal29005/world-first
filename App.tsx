@@ -239,6 +239,7 @@ const App: React.FC = () => {
         isAddingMode={isAddingMode}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onRandomStory={handleRandomStory}
       />
 
       {selectedStory && (
