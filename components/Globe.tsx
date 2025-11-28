@@ -37,6 +37,11 @@ const Globe: React.FC<GlobeProps> = ({
   const lastPosRef = useRef<[number, number] | null>(null);
   const startPosRef = useRef<[number, number] | null>(null);
 
+  // Visual Effects Refs
+  const particlesRef = useRef<any[]>([]);
+  const activeCategoryRef = useRef<Category | null>(null);
+  const categoryHoverStartTimeRef = useRef<number>(0);
+
   const [worldData, setWorldData] = useState<any>(null);
 
   // Load TopoJSON data
@@ -81,6 +86,7 @@ const Globe: React.FC<GlobeProps> = ({
     const nightGroup = svg.append("g").attr("class", "night-group");
     const landGroup = svg.append("g").attr("class", "land-group");
     const constellationsGroup = svg.append("g").attr("class", "constellations-group");
+    const particlesGroup = svg.append("g").attr("class", "particles-group");
     const heatmapGroup = svg.append("g").attr("class", "heatmap-group");
     const markersGroup = svg.append("g").attr("class", "markers-group");
 
@@ -177,11 +183,6 @@ const Globe: React.FC<GlobeProps> = ({
 
         rotationRef.current[0] += velocityRef.current[0];
         rotationRef.current[1] += velocityRef.current[1];
-
-        // Auto-rotation removed as per user request
-        // if (!isAddingMode && Math.abs(velocityRef.current[0]) < 0.001 && Math.abs(velocityRef.current[1]) < 0.001) {
-        //   rotationRef.current[0] += 0.05;
-        // }
       }
 
       // 2. Update Projection
@@ -202,34 +203,89 @@ const Globe: React.FC<GlobeProps> = ({
         return { ...story, projected, isVisible };
       }).filter(d => d.isVisible && d.projected);
 
-      // 5. Draw Constellations
-      constellationsGroup.selectAll("*").remove();
-      if (visibleDots.length > 0) {
-        const activeCategory = hoveredCategory || selectedCategory;
-        if (activeCategory) {
-          const categoryDots = visibleDots.filter(d => d.category === activeCategory);
-          if (categoryDots.length > 1) {
-            const lineGenerator = d3.line()
-              .x((d: any) => d.projected![0])
-              .y((d: any) => d.projected![1])
-              .curve(d3.curveLinear);
+      // 5. Draw Constellations (Animated)
+      const activeCategory = hoveredCategory || selectedCategory;
 
-            const pathData = lineGenerator(categoryDots as any);
-            if (pathData) {
-              constellationsGroup.append("path")
-                .attr("d", pathData)
-                .attr("fill", "none")
-                .attr("stroke", CATEGORY_COLORS[activeCategory] || "#ffffff")
-                .attr("stroke-width", 1)
-                .attr("stroke-opacity", 0.5)
-                .attr("stroke-dasharray", "4,4")
-                .style("pointer-events", "none");
-            }
+      // Reset animation time if category changes
+      if (activeCategory !== activeCategoryRef.current) {
+        activeCategoryRef.current = activeCategory;
+        categoryHoverStartTimeRef.current = Date.now();
+      }
+
+      constellationsGroup.selectAll("*").remove(); // Clear previous frame's paths
+
+      if (activeCategory && visibleDots.length > 0) {
+        const categoryDots = visibleDots.filter(d => d.category === activeCategory);
+        if (categoryDots.length > 1) {
+          const lineGenerator = d3.line()
+            .x((d: any) => d.projected![0])
+            .y((d: any) => d.projected![1])
+            .curve(d3.curveLinear);
+
+          const pathData = lineGenerator(categoryDots as any);
+          if (pathData) {
+            const path = constellationsGroup.append("path")
+              .attr("d", pathData)
+              .attr("fill", "none")
+              .attr("stroke", CATEGORY_COLORS[activeCategory] || "#ffffff")
+              .attr("stroke-width", 1.5)
+              .attr("stroke-opacity", 0.6)
+              .style("pointer-events", "none");
+
+            // Animate stroke-dashoffset
+            const totalLength = (path.node() as SVGPathElement).getTotalLength();
+            const elapsed = Date.now() - categoryHoverStartTimeRef.current;
+            const duration = 1500; // 1.5s to draw
+            const progress = Math.min(1, elapsed / duration);
+
+            path
+              .attr("stroke-dasharray", totalLength + " " + totalLength)
+              .attr("stroke-dashoffset", totalLength * (1 - progress));
           }
         }
       }
 
-      // 6. Draw Heatmap (if enabled)
+      // 6. Particle Effects (Fireflies)
+      particlesGroup.selectAll("*").remove(); // Clear particles (we'll redraw them)
+
+      if (selectedStory) {
+        // Spawn new particles
+        if (Math.random() < 0.2) { // Spawn chance per frame
+          const storyDot = visibleDots.find(d => d.id === selectedStory.id);
+          if (storyDot && storyDot.projected) {
+            particlesRef.current.push({
+              x: storyDot.projected[0],
+              y: storyDot.projected[1],
+              vx: (Math.random() - 0.5) * 1.5,
+              vy: (Math.random() - 0.5) * 1.5,
+              life: 1.0,
+              color: CATEGORY_COLORS[selectedStory.category] || "#ffffff"
+            });
+          }
+        }
+      }
+
+      // Update and Draw Particles
+      particlesRef.current = particlesRef.current.filter(p => p.life > 0);
+      particlesRef.current.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.02; // Fade out speed
+      });
+
+      if (particlesRef.current.length > 0) {
+        particlesGroup.selectAll("circle")
+          .data(particlesRef.current)
+          .enter().append("circle")
+          .attr("cx", d => d.x)
+          .attr("cy", d => d.y)
+          .attr("r", d => 2 * d.life) // Shrink as they die
+          .attr("fill", d => d.color)
+          .attr("opacity", d => d.life)
+          .style("pointer-events", "none");
+      }
+
+      // 7. Draw Heatmap (if enabled)
       heatmapGroup.selectAll("*").remove();
       if (showHeatmap && visibleDots.length > 0) {
         const densityData = d3.contourDensity()
@@ -253,7 +309,7 @@ const Globe: React.FC<GlobeProps> = ({
           .style("pointer-events", "none");
       }
 
-      // 7. Draw Markers
+      // 8. Draw Markers
       // We use D3 data join for markers to avoid full remove/add if possible, 
       // but for simplicity in this loop we'll clear and redraw or use a key function.
       // Since 'visibleDots' changes every frame during rotation, we effectively redraw.
