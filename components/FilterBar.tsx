@@ -13,6 +13,7 @@ interface FilterBarProps {
   onToggleTimeTravel: () => void;
   showHeatmap: boolean;
   onToggleHeatmap: () => void;
+  onHover: (cat: Category | null) => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({
@@ -26,7 +27,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   isTimeTravelOpen,
   onToggleTimeTravel,
   showHeatmap,
-  onToggleHeatmap
+  onToggleHeatmap,
+  onHover
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -93,6 +95,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     onClick={() => { onSelect(cat); setIsMenuOpen(false); }}
                     label={cat.replace('First ', '')}
                     icon={CATEGORY_ICONS[cat]}
+                    onMouseEnter={() => onHover(cat)}
+                    onMouseLeave={() => onHover(null)}
                   />
                 ))}
               </div>
@@ -243,6 +247,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   onClick={() => onSelect(cat)}
                   label={cat.replace('First ', '')}
                   icon={CATEGORY_ICONS[cat]}
+                  onMouseEnter={() => onHover(cat)}
+                  onMouseLeave={() => onHover(null)}
                 />
               ))}
             </div>
@@ -337,6 +343,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 onClick={() => onSelect(cat)}
                 label={cat.replace('First ', '')}
                 icon={CATEGORY_ICONS[cat]}
+                onMouseEnter={() => onHover(cat)}
+                onMouseLeave={() => onHover(null)}
               />
             ))}
           </div>
@@ -351,11 +359,15 @@ interface FilterButtonProps {
   onClick: () => void;
   label: string;
   icon?: string;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-const FilterButton: React.FC<FilterButtonProps> = ({ active, onClick, label, icon }) => (
+const FilterButton: React.FC<FilterButtonProps> = ({ active, onClick, label, icon, onMouseEnter, onMouseLeave }) => (
   <button
     onClick={onClick}
+    onMouseEnter={onMouseEnter}
+    onMouseLeave={onMouseLeave}
     className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 border border-transparent flex items-center gap-1
       ${active
         ? 'bg-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] border-white/20'

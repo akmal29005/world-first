@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
@@ -9,19 +10,32 @@ interface GlobeProps {
   onMapClick: (lat: number, lng: number, country?: string) => void;
   isAddingMode: boolean;
   showHeatmap?: boolean;
+  hoveredCategory: Category | null;
+  selectedCategory: Category | null;
+  selectedStory: Story | null;
 }
 
-const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddingMode, showHeatmap = false }) => {
+const Globe: React.FC<GlobeProps> = ({
+  stories,
+  onStoryClick,
+  onMapClick,
+  isAddingMode,
+  showHeatmap = false,
+  hoveredCategory,
+  selectedCategory,
+  selectedStory
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Refs for animation state (mutable, won't trigger re-renders)
   const rotationRef = useRef<[number, number]>([0, 0]);
+  const targetRotationRef = useRef<[number, number] | null>(null);
   const scaleRef = useRef<number>(0); // Will be set on init
   const velocityRef = useRef<[number, number]>([0, 0]);
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef<[number, number] | null>(null);
-  const frameIdRef = useRef<number>(0);
+  const startPosRef = useRef<[number, number] | null>(null);
 
   const [worldData, setWorldData] = useState<any>(null);
 
@@ -40,6 +54,16 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
     const height = window.innerHeight;
     scaleRef.current = Math.min(width, height) / 2.5;
   }, []);
+
+  // Handle Selected Story Rotation (Journey Mode)
+  useEffect(() => {
+    if (selectedStory) {
+      // D3 Rotation is [-lng, -lat]
+      targetRotationRef.current = [-selectedStory.lng, -selectedStory.lat];
+    } else {
+      targetRotationRef.current = null;
+    }
+  }, [selectedStory]);
 
   // Main D3 Render Loop
   useEffect(() => {
@@ -106,8 +130,7 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
     const diff = now.getTime() - start.getTime();
     const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
     const sunLat = 23.5 * Math.sin(2 * Math.PI * (dayOfYear - 80) / 365);
-    const nightCenter: [number, number] = [sunLon + 180, -sunLat];
-    const nightCircle = d3.geoCircle().center(nightCenter).radius(90);
+    const nightCircle = d3.geoCircle().center([sunLon + 180, -sunLat]).radius(90);
 
     nightGroup.append("path")
       .datum(nightCircle())
@@ -118,19 +141,47 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
 
     // --- Animation Loop ---
     const timer = d3.timer(() => {
-      // 1. Apply Momentum
-      if (!isDraggingRef.current) {
-        // Friction
+      // Logic: 
+      // 1. If dragging -> User controls rotation
+      // 2. If selectedStory -> Auto-rotate to target
+      // 3. If idle -> Apply momentum or auto-rotate slowly
+
+      if (isDraggingRef.current) {
+        // Handled by drag behavior
+      } else if (targetRotationRef.current) {
+        // Smoothly interpolate to target
+        const [currentLon, currentLat] = rotationRef.current;
+        const [targetLon, targetLat] = targetRotationRef.current;
+
+        // Simple easing
+        const k = 0.05;
+        let dLon = targetLon - currentLon;
+        let dLat = targetLat - currentLat;
+
+        // Handle wrapping for longitude
+        if (dLon > 180) dLon -= 360;
+        if (dLon < -180) dLon += 360;
+
+        rotationRef.current[0] += dLon * k;
+        rotationRef.current[1] += dLat * k;
+
+        // Stop momentum
+        velocityRef.current = [0, 0];
+      } else {
+        // Momentum
         velocityRef.current[0] *= 0.95;
         velocityRef.current[1] *= 0.95;
 
-        // Stop if slow enough
-        if (Math.abs(velocityRef.current[0]) < 0.01) velocityRef.current[0] = 0;
-        if (Math.abs(velocityRef.current[1]) < 0.01) velocityRef.current[1] = 0;
+        if (Math.abs(velocityRef.current[0]) < 0.001) velocityRef.current[0] = 0;
+        if (Math.abs(velocityRef.current[1]) < 0.001) velocityRef.current[1] = 0;
 
-        // Apply velocity
         rotationRef.current[0] += velocityRef.current[0];
         rotationRef.current[1] += velocityRef.current[1];
+
+        // Auto-rotation removed as per user request
+        // if (!isAddingMode && Math.abs(velocityRef.current[0]) < 0.001 && Math.abs(velocityRef.current[1]) < 0.001) {
+        //   rotationRef.current[0] += 0.05;
+        // }
       }
 
       // 2. Update Projection
@@ -154,32 +205,28 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       // 5. Draw Constellations
       constellationsGroup.selectAll("*").remove();
       if (visibleDots.length > 0) {
-        const storiesByCategory: { [key: string]: typeof visibleDots } = {};
-        visibleDots.forEach(d => {
-          if (!storiesByCategory[d.category]) storiesByCategory[d.category] = [];
-          storiesByCategory[d.category].push(d);
-        });
-
-        Object.entries(storiesByCategory).forEach(([category, dots]) => {
-          if (dots.length > 1) {
+        const activeCategory = hoveredCategory || selectedCategory;
+        if (activeCategory) {
+          const categoryDots = visibleDots.filter(d => d.category === activeCategory);
+          if (categoryDots.length > 1) {
             const lineGenerator = d3.line()
               .x((d: any) => d.projected![0])
               .y((d: any) => d.projected![1])
               .curve(d3.curveLinear);
 
-            const pathData = lineGenerator(dots as any);
+            const pathData = lineGenerator(categoryDots as any);
             if (pathData) {
               constellationsGroup.append("path")
                 .attr("d", pathData)
                 .attr("fill", "none")
-                .attr("stroke", CATEGORY_COLORS[category as Category] || "#ffffff")
-                .attr("stroke-width", 0.5)
-                .attr("stroke-opacity", 0.3)
-                .attr("stroke-dasharray", "2,4")
+                .attr("stroke", CATEGORY_COLORS[activeCategory] || "#ffffff")
+                .attr("stroke-width", 1)
+                .attr("stroke-opacity", 0.5)
+                .attr("stroke-dasharray", "4,4")
                 .style("pointer-events", "none");
             }
           }
-        });
+        }
       }
 
       // 6. Draw Heatmap (if enabled)
@@ -233,9 +280,9 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
 
         markersEnter.append("circle")
           .attr("r", 3)
+          .attr("class", "core-circle")
           .attr("stroke", "white")
-          .attr("stroke-width", 1)
-          .style("filter", "drop-shadow(0 0 4px rgba(255,255,255,0.5))");
+          .attr("stroke-width", 1);
       } else {
         markersEnter.append("circle")
           .attr("r", 1.5)
@@ -251,13 +298,17 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       if (!showHeatmap) {
         markersUpdate.select(".pulse-circle")
           .attr("fill", d => CATEGORY_COLORS[d.category])
+          .attr("r", d => (selectedStory?.id === d.id ? 15 : 5)) // Highlight selected
+          .attr("opacity", d => (selectedStory?.id === d.id ? 0.5 : 1))
           .attr("class", d => {
+            const isSelected = selectedStory?.id === d.id;
             const isNew = d.createdAt && (Date.now() - new Date(d.createdAt).getTime() < 24 * 60 * 60 * 1000);
-            return `pulse-circle pointer-events-none ${isNew ? 'pin-glow' : 'opacity-0'}`;
+            return `pulse-circle pointer-events-none ${isSelected || isNew ? 'pin-glow' : ''}`;
           });
 
-        markersUpdate.select("circle:not(.pulse-circle)")
-          .attr("fill", d => CATEGORY_COLORS[d.category]);
+        markersUpdate.select(".core-circle")
+          .attr("fill", d => CATEGORY_COLORS[d.category])
+          .attr("r", d => (selectedStory?.id === d.id ? 6 : 3));
       } else {
         // Ensure correct styling if switching back and forth (simplified here, assuming full redraw on toggle)
       }
@@ -265,28 +316,47 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
     });
 
     // Drag Behavior
+
+
     const drag = d3.drag()
       .on("start", (event) => {
-        isDraggingRef.current = true;
+        // Don't set isDraggingRef immediately to allow clicks
         velocityRef.current = [0, 0];
         lastPosRef.current = [event.x, event.y];
+        startPosRef.current = [event.x, event.y];
+        targetRotationRef.current = null; // Cancel auto-rotation on user interact
       })
       .on("drag", (event) => {
-        if (!lastPosRef.current) return;
+        if (!lastPosRef.current || !startPosRef.current) return;
+
         const dx = event.x - lastPosRef.current[0];
         const dy = event.y - lastPosRef.current[1];
 
-        const sensitivity = 0.25;
-        rotationRef.current[0] += dx * sensitivity;
-        rotationRef.current[1] -= dy * sensitivity;
+        // Calculate total distance moved from start
+        const totalDx = event.x - startPosRef.current[0];
+        const totalDy = event.y - startPosRef.current[1];
+        const dist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
 
-        // Track velocity
-        velocityRef.current = [dx * sensitivity, -dy * sensitivity];
+        // Threshold check for drag vs click (increased to 6px for mobile tolerance)
+        if (!isDraggingRef.current && dist > 6) {
+          isDraggingRef.current = true;
+        }
+
+        if (isDraggingRef.current) {
+          const sensitivity = 0.25;
+          rotationRef.current[0] += dx * sensitivity;
+          rotationRef.current[1] -= dy * sensitivity;
+
+          // Track velocity
+          velocityRef.current = [dx * sensitivity, -dy * sensitivity];
+        }
 
         lastPosRef.current = [event.x, event.y];
       })
       .on("end", () => {
         lastPosRef.current = null;
+        startPosRef.current = null;
+        // Small delay to ensure click handler sees the correct state if it was a drag
         setTimeout(() => { isDraggingRef.current = false; }, 50);
       });
 
@@ -297,7 +367,7 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       svg.on(".drag", null);
     };
 
-  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick]); // Re-run if these change
+  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory]); // Re-run if these change
 
   // Zoom Handlers
   const handleZoom = useCallback((delta: number) => {

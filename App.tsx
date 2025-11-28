@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Globe from './components/Globe';
 import StoryCard from './components/StoryCard';
 import StoryForm from './components/StoryForm';
@@ -9,7 +9,6 @@ import { GlobeLoader, EmptyState } from './components/LoadingStates';
 import { Story, Category } from './types';
 import TimeSlider from './components/TimeSlider';
 import AmbientSound from './components/AmbientSound';
-import LiveFeed from './components/LiveFeed';
 
 interface NewPinState {
   lat: number;
@@ -28,6 +27,13 @@ const App: React.FC = () => {
   const [showRecent, setShowRecent] = useState(false);
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [hoveredCategory, setHoveredCategory] = useState<Category | null>(null);
+
+  // Tour State
+  const [isTourActive, setIsTourActive] = useState(false);
+  const [tourStories, setTourStories] = useState<Story[]>([]);
+  const [tourIndex, setTourIndex] = useState(0);
+  const tourTimerRef = useRef<number | null>(null);
 
   // Time Travel State
   const [yearRange, setYearRange] = useState<[number, number]>([1950, new Date().getFullYear()]);
@@ -55,7 +61,6 @@ const App: React.FC = () => {
       }
 
       // 2. Static Stories (Client-side fallback)
-
       const staticStories: Story[] = [
         {
           id: 'static-1',
@@ -67,7 +72,67 @@ const App: React.FC = () => {
           city: "Sydney",
           state: "NSW",
           country: "Australia",
-          createdAt: new Date().toISOString() // Make static story "new" for testing if needed
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'static-2',
+          category: Category.FIRST_OCEAN,
+          year: 2010,
+          text: "The Pacific looked infinite from the cliffs of Big Sur.",
+          lat: 36.2704,
+          lng: -121.8081,
+          city: "Big Sur",
+          state: "California",
+          country: "USA",
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'static-3',
+          category: Category.FIRST_OCEAN,
+          year: 2015,
+          text: "Dipping my toes in the Mediterranean, the water was crystal clear.",
+          lat: 41.3851,
+          lng: 2.1734,
+          city: "Barcelona",
+          state: "Catalonia",
+          country: "Spain",
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'static-4',
+          category: Category.FIRST_HEARTBREAK,
+          year: 2008,
+          text: "Walking through Shibuya crossing, feeling completely alone in the crowd.",
+          lat: 35.6591,
+          lng: 139.7006,
+          city: "Tokyo",
+          state: "Tokyo",
+          country: "Japan",
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'static-5',
+          category: Category.FIRST_HEARTBREAK,
+          year: 2012,
+          text: "Rain in London hides the tears well.",
+          lat: 51.5074,
+          lng: -0.1278,
+          city: "London",
+          state: "England",
+          country: "UK",
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'static-6',
+          category: Category.FIRST_TRAVEL,
+          year: 2019,
+          text: "The lights of Times Square were overwhelming, but I felt alive.",
+          lat: 40.7580,
+          lng: -73.9855,
+          city: "New York",
+          state: "NY",
+          country: "USA",
+          createdAt: new Date().toISOString()
         }
       ];
 
@@ -80,16 +145,19 @@ const App: React.FC = () => {
 
   const handleStoryClick = useCallback((story: Story) => {
     if (isAddingMode) return;
+    // If tour is active and user clicks manually, stop the tour
+    if (isTourActive) stopTour();
     setSelectedStory(story);
-  }, [isAddingMode]);
+  }, [isAddingMode, isTourActive]);
 
   const handleMapClick = useCallback((lat: number, lng: number, country?: string) => {
     if (isAddingMode) {
       setNewPinLocation({ lat, lng, country });
     } else {
+      if (isTourActive) stopTour();
       setSelectedStory(null);
     }
-  }, [isAddingMode]);
+  }, [isAddingMode, isTourActive]);
 
   const handleSaveStory = async (newStoryData: Omit<Story, 'id'>) => {
     // Optimistic Update
@@ -129,6 +197,7 @@ const App: React.FC = () => {
   };
 
   const handleAddModeToggle = () => {
+    if (isTourActive) stopTour();
     setIsAddingMode(!isAddingMode);
     setSelectedStory(null);
     setNewPinLocation(null);
@@ -172,10 +241,11 @@ const App: React.FC = () => {
 
   // Random story handler
   const handleRandomStory = useCallback(() => {
+    if (isTourActive) stopTour();
     if (visibleStories.length === 0) return;
     const randomIndex = Math.floor(Math.random() * visibleStories.length);
     setSelectedStory(visibleStories[randomIndex]);
-  }, [visibleStories]);
+  }, [visibleStories, isTourActive]);
 
   // Reaction handler
   const handleReaction = useCallback((storyId: string, reaction: string) => {
@@ -192,6 +262,67 @@ const App: React.FC = () => {
     setIsTimeTravelOpen(false);
     setShowHeatmap(false);
   }, []);
+
+  // --- Journey Mode Logic ---
+
+  const startTour = useCallback(() => {
+    if (stories.length === 0) return;
+
+    // Pick a random category to tour, or just random stories if mixed
+    const categories = Object.values(Category);
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+
+    // Filter stories by this category (or use all if few)
+    let tourSet = stories.filter(s => s.category === randomCategory);
+    if (tourSet.length < 3) tourSet = stories; // Fallback to all if not enough
+
+    // Shuffle and pick 5
+    const shuffled = [...tourSet].sort(() => 0.5 - Math.random()).slice(0, 5);
+
+    setTourStories(shuffled);
+    setTourIndex(0);
+    setIsTourActive(true);
+    setSelectedStory(shuffled[0]);
+
+    // Set filter to match tour for visual consistency (optional)
+    // setFilter(randomCategory); 
+  }, [stories]);
+
+  const stopTour = useCallback(() => {
+    setIsTourActive(false);
+    setTourStories([]);
+    setTourIndex(0);
+    if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+  }, []);
+
+  const toggleTour = useCallback(() => {
+    if (isTourActive) {
+      stopTour();
+    } else {
+      startTour();
+    }
+  }, [isTourActive, startTour, stopTour]);
+
+  // Tour Loop
+  useEffect(() => {
+    if (!isTourActive || tourStories.length === 0) return;
+
+    // Schedule next story
+    tourTimerRef.current = window.setTimeout(() => {
+      const nextIndex = tourIndex + 1;
+      if (nextIndex < tourStories.length) {
+        setTourIndex(nextIndex);
+        setSelectedStory(tourStories[nextIndex]);
+      } else {
+        stopTour(); // End of tour
+      }
+    }, 10000); // 10 seconds per story
+
+    return () => {
+      if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+    };
+  }, [isTourActive, tourIndex, tourStories, stopTour]);
+
 
   const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent || isTimeTravelOpen || showHeatmap;
 
@@ -214,22 +345,28 @@ const App: React.FC = () => {
             A geography of emotion. Click a light to read a story, or add your own to the collective memory.
           </p>
         </div>
-      </div>
 
-      {/* Live Feed Ticker */}
-      {!isLoading && !isAddingMode && (
-        <LiveFeed stories={stories} />
-      )}
+        {/* Tour Status Indicator */}
+        {isTourActive && (
+          <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
+            <span className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
+            <span className="text-purple-200 font-medium tracking-wide text-sm">
+              Journey Mode • {tourIndex + 1}/{tourStories.length}
+            </span>
+            <button
+              onClick={stopTour}
+              className="ml-2 text-white/50 hover:text-white pointer-events-auto"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Discovery Panel */}
       <DiscoveryPanel
-        stories={visibleStories}
-        onRandomStory={handleRandomStory}
-        showRecent={showRecent}
-        onToggleRecent={() => {
-          setShowRecent(!showRecent);
-          if (!showRecent) setIsTimeTravelOpen(false); // Close time travel if opening recent
-        }}
+        onToggleTour={toggleTour}
+        isTourActive={isTourActive}
       />
 
       {/* Time Slider (Only show if NOT in "Recent" mode, NOT adding, and Time Travel is OPEN) */}
@@ -272,6 +409,9 @@ const App: React.FC = () => {
             onMapClick={handleMapClick}
             isAddingMode={isAddingMode}
             showHeatmap={showHeatmap}
+            hoveredCategory={hoveredCategory}
+            selectedCategory={filter === 'ALL' ? null : filter}
+            selectedStory={selectedStory}
           />
         )}
       </div>
@@ -292,12 +432,16 @@ const App: React.FC = () => {
         }}
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+        onHover={setHoveredCategory}
       />
 
       {selectedStory && (
         <StoryCard
           story={selectedStory}
-          onClose={() => setSelectedStory(null)}
+          onClose={() => {
+            setSelectedStory(null);
+            if (isTourActive) stopTour();
+          }}
           onReact={handleReaction}
         />
       )}
