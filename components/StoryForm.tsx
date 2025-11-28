@@ -107,8 +107,11 @@ const StoryForm: React.FC<StoryFormProps> = ({ lat, lng, initialCountry, onSave,
   };
 
   return (
-    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-50 px-4">
-      <div className="glass-panel rounded-xl p-6 shadow-2xl border border-gray-700 max-h-[90vh] overflow-y-auto custom-scrollbar">
+    <div className="fixed bottom-0 left-0 right-0 z-50 md:absolute md:top-1/2 md:left-1/2 md:transform md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md md:px-4">
+      <div className="glass-panel rounded-t-2xl md:rounded-xl p-6 shadow-2xl border-t border-x md:border border-gray-700 border-b-0 md:border-b max-h-[85vh] md:max-h-[90vh] overflow-y-auto custom-scrollbar animate-[slideUp_0.3s_ease-out]">
+        {/* Mobile Drag Handle */}
+        <div className="md:hidden w-12 h-1.5 bg-gray-600/50 rounded-full mx-auto mb-6" />
+
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-neon-pink animate-pulse"></span>
           Mark Your First

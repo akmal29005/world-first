@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { feature } from 'topojson-client';
 import { Story, Category } from '../types';
@@ -38,21 +38,27 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // State
-  const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  // Data State (Keep in React state as it changes infrequently)
   const [worldData, setWorldData] = useState<any>(null);
   const [countryNames, setCountryNames] = useState<Map<string, string>>(new Map());
 
-  // Hover State
+  // Animation State (Refs for performance - NO RE-RENDERS on drag)
+  const rotationRef = useRef<[number, number, number]>([0, 0, 0]);
+  const zoomLevelRef = useRef<number>(1);
+  const projectionRef = useRef(d3.geoOrthographic());
+
+  // Interaction Refs
+  const isDraggingRef = useRef(false);
+  const isPressingRef = useRef(false); // Track mouse down state
+  const isAddingModeRef = useRef(isAddingMode);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const momentumTimerRef = useRef<d3.Timer | null>(null);
+  const velocityRef = useRef<{ x: number, y: number, time: number }>({ x: 0, y: 0, time: 0 });
+  const lastDrawTimeRef = useRef<number>(0);
+
+  // Hover State (React state is fine here as it only updates when hovering NEW country)
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number, y: number } | null>(null);
-
-  // Refs for D3 interaction to avoid stale closures in event listeners
-  const rotationRef = useRef<[number, number, number]>([0, 0, 0]);
-  const projectionRef = useRef(d3.geoOrthographic());
-  const isDraggingRef = useRef(false);
-  const isAddingModeRef = useRef(isAddingMode);
 
   // Sync isAddingMode ref
   useEffect(() => {
@@ -75,28 +81,178 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       .catch(err => console.error("Failed to load map data", err));
   }, []);
 
+  // Core Draw Function - Reads from Refs
+  const drawGlobe = useCallback(() => {
+    if (!svgRef.current || !wrapperRef.current || !worldData) return;
+
+    const width = wrapperRef.current.clientWidth;
+    const height = wrapperRef.current.clientHeight;
+    const baseScale = Math.min(width, height) / 2.5;
+
+    // Update projection from Refs
+    const projection = projectionRef.current
+      .scale(baseScale * zoomLevelRef.current)
+      .center([0, 0])
+      .translate([width / 2, height / 2])
+      .rotate(rotationRef.current);
+
+    const pathGenerator = d3.geoPath().projection(projection);
+    const svg = d3.select(svgRef.current);
+
+    // --- 1. Background ---
+    // Check if background exists, if not create it
+    let bg = svg.select(".globe-bg");
+    if (bg.empty()) {
+      bg = svg.append("circle")
+        .attr("class", "globe-bg")
+        .attr("fill", "#0f172a")
+        .attr("stroke", "#1e293b")
+        .attr("stroke-width", 2);
+    }
+    bg.attr("cx", width / 2)
+      .attr("cy", height / 2)
+      .attr("r", projection.scale());
+
+    // --- 2. Countries ---
+    let countriesGroup = svg.select<SVGGElement>(".countries-group");
+    if (countriesGroup.empty()) {
+      countriesGroup = svg.append("g").attr("class", "countries-group");
+    }
+
+    // Join data
+    const paths = countriesGroup.selectAll("path")
+      .data(worldData.features);
+
+    // Enter
+    paths.enter().append("path")
+      .attr("class", "country-path transition-colors duration-150 ease-out")
+      .attr("stroke-width", 0.5)
+      .merge(paths as any) // Update
+      .attr("d", pathGenerator as any)
+      .attr("fill", function (this: any, d: any) {
+        // Optimization: Read hover state directly if needed, or rely on React effect for styling
+        // For pure performance, we keep styling in the separate effect, 
+        // but we need to ensure 'd' attribute is updated for rotation.
+        return "#1e293b";
+      })
+      .attr("stroke", "#334155");
+
+    paths.exit().remove();
+
+    // --- 3. Graticules ---
+    let graticulePath = svg.select(".graticule");
+    if (graticulePath.empty()) {
+      graticulePath = svg.append("path")
+        .attr("class", "graticule")
+        .attr("fill", "none")
+        .attr("stroke", "rgba(255,255,255,0.05)");
+    }
+    const graticule = d3.geoGraticule();
+    graticulePath.datum(graticule()).attr("d", pathGenerator);
+
+    // --- 4. Markers ---
+    // Calculate visibility
+    const visibleDots = stories.map(story => {
+      const coords: [number, number] = [story.lng, story.lat];
+      const projected = projection(coords);
+      const center = projection.invert!([width / 2, height / 2]);
+      const d = d3.geoDistance(coords, center as [number, number]);
+      const isVisible = d < 1.57; // ~90 degrees
+      return { ...story, projected, isVisible };
+    }).filter(s => s.isVisible && s.projected);
+
+    let markersGroup = svg.select(".markers-group");
+    if (markersGroup.empty()) {
+      markersGroup = svg.append("g").attr("class", "markers-group");
+    }
+
+    const markers = markersGroup.selectAll("g.marker")
+      .data(visibleDots, (d: any) => d.id);
+
+    const markersEnter = markers.enter().append("g")
+      .attr("class", "marker cursor-pointer")
+      .on("click", (event, d) => {
+        if (!isDraggingRef.current) {
+          event.stopPropagation();
+          onStoryClick(d);
+        }
+      });
+
+    markersEnter.append("circle")
+      .attr("r", 5)
+      .attr("class", "pin-glow pointer-events-none");
+
+    markersEnter.append("circle")
+      .attr("r", 3)
+      .attr("stroke", "white")
+      .attr("stroke-width", 1)
+      .style("filter", "drop-shadow(0 0 4px rgba(255,255,255,0.5))");
+
+    // Update positions
+    markers.merge(markersEnter as any)
+      .attr("transform", d => `translate(${d.projected![0]}, ${d.projected![1]})`);
+
+    // Update colors (in case category changes or new stories)
+    markers.merge(markersEnter as any).select(".pin-glow")
+      .attr("fill", d => CATEGORY_COLORS[d.category]);
+
+    markers.merge(markersEnter as any).select("circle:not(.pin-glow)")
+      .attr("fill", d => CATEGORY_COLORS[d.category]);
+
+    markers.exit().remove();
+
+  }, [worldData, stories, onStoryClick]); // Dependencies that require a full redraw structure
+
   // Setup Interactions (Drag & Zoom)
   useEffect(() => {
     if (!svgRef.current || !worldData) return;
 
     const svg = d3.select(svgRef.current);
 
-    // Drag Behavior (Rotation)
+    // Initial Draw
+    drawGlobe();
+
+    // Zoom Behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([1, 8])
+      .on("zoom", (event) => {
+        zoomLevelRef.current = event.transform.k;
+        drawGlobe(); // Direct draw
+      })
+      .filter((event) => {
+        return event.type === 'wheel';
+      });
+
+    zoomBehaviorRef.current = zoom;
+    svg.call(zoom);
+
+    // Drag Behavior
     const drag = d3.drag<SVGSVGElement, unknown>()
       .subject(() => ({ x: 0, y: 0 }))
       .on("start", () => {
         isDraggingRef.current = false;
+        isPressingRef.current = true;
+        if (momentumTimerRef.current) {
+          momentumTimerRef.current.stop();
+          momentumTimerRef.current = null;
+        }
+        velocityRef.current = { x: 0, y: 0, time: Date.now() };
         if (wrapperRef.current) wrapperRef.current.style.cursor = "grabbing";
       })
       .on("drag", (event) => {
-        // Threshold to differentiate click from drag
         if (Math.abs(event.dx) > 1 || Math.abs(event.dy) > 1) {
           isDraggingRef.current = true;
         }
 
         const rotate = rotationRef.current;
-        // Rotation sensitivity adjusts with zoom scale to feel consistent
         const k = 75 / projectionRef.current.scale();
+
+        // Calculate Velocity
+        const now = Date.now();
+        const dt = now - velocityRef.current.time;
+        if (dt > 0) {
+          velocityRef.current = { x: event.dx, y: event.dy, time: now };
+        }
 
         const nextRotation: [number, number, number] = [
           rotate[0] + event.dx * k,
@@ -105,139 +261,63 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
         ];
 
         rotationRef.current = nextRotation;
-        setRotation(nextRotation);
+        drawGlobe(); // Direct draw
       })
       .on("end", () => {
+        isPressingRef.current = false;
         if (wrapperRef.current) {
           wrapperRef.current.style.cursor = isAddingModeRef.current ? "crosshair" : "grab";
         }
-      });
 
-    // Zoom Behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 8]) // Zoom levels: 1x to 8x
-      .on("zoom", (event) => {
-        setZoomLevel(event.transform.k);
-      })
-      .filter((event) => {
-        // Allow wheel zoom, but prevent mousedown from hijacking drag
-        // Also allow touchstart if needed, but keeping it simple for now
-        return event.type === 'wheel';
-      });
+        // Momentum Logic
+        if (isDraggingRef.current) {
+          const { x, y } = velocityRef.current;
+          const v = Math.sqrt(x * x + y * y);
 
-    svg.call(drag).call(zoom);
+          if (v > 2) {
+            const friction = 0.95;
+            let vx = x;
+            let vy = y;
 
-    // Disable double click to zoom (optional, often conflicts with rapid clicking)
-    svg.on("dblclick.zoom", null);
+            momentumTimerRef.current = d3.timer(() => {
+              vx *= friction;
+              vy *= friction;
 
-    return () => {
-      svg.on(".drag", null);
-      svg.on(".zoom", null);
-    };
-  }, [worldData]); // Run once when world data loads
+              if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
+                if (momentumTimerRef.current) momentumTimerRef.current.stop();
+                return;
+              }
 
-  // Render Globe (Draw Loop) - Geometry & Markers
-  useEffect(() => {
-    if (!svgRef.current || !wrapperRef.current || !worldData) return;
+              const k = 75 / projectionRef.current.scale();
+              const rotate = rotationRef.current;
+              const nextRotation: [number, number, number] = [
+                rotate[0] + vx * k,
+                rotate[1] - vy * k,
+                rotate[2]
+              ];
 
-    const width = wrapperRef.current.clientWidth;
-    const height = wrapperRef.current.clientHeight;
-    const baseScale = Math.min(width, height) / 2.5;
-
-    // Update projection
-    const projection = projectionRef.current
-      .scale(baseScale * zoomLevel) // Apply zoom level
-      .center([0, 0])
-      .translate([width / 2, height / 2])
-      .rotate(rotation);
-
-    const pathGenerator = d3.geoPath().projection(projection);
-    const svg = d3.select(svgRef.current);
-
-    // Clear and Redraw
-    svg.selectAll("*").remove();
-
-    // 1. Draw Globe Background (Ocean)
-    svg.append("circle")
-      .attr("fill", "#0f172a")
-      .attr("stroke", "#1e293b")
-      .attr("stroke-width", 2)
-      .attr("cx", width / 2)
-      .attr("cy", height / 2)
-      .attr("r", projection.scale())
-      .attr("class", "globe-bg");
-
-    // 2. Draw Countries
-    const countriesGroup = svg.append("g").attr("class", "countries-group");
-
-    countriesGroup.selectAll("path")
-      .data(worldData.features)
-      .enter().append("path")
-      .attr("d", pathGenerator as any)
-      .attr("data-id", (d: any) => d.id) // Store ID for efficient selection later
-      .attr("fill", "#1e293b") // Default fill
-      .attr("stroke", "#334155") // Default stroke
-      .attr("stroke-width", 0.5)
-      .attr("class", "country-path transition-colors duration-150 ease-out");
-
-    // 3. Graticules
-    const graticule = d3.geoGraticule();
-    svg.append("path")
-      .datum(graticule())
-      .attr("d", pathGenerator)
-      .attr("fill", "none")
-      .attr("stroke", "rgba(255,255,255,0.05)");
-
-    // 4. Calculate Visible Markers
-    const visibleDots = stories.map(story => {
-      const coords: [number, number] = [story.lng, story.lat];
-      const projected = projection(coords);
-      // Calculate visibility based on distance from center
-      const center = projection.invert!([width / 2, height / 2]);
-      const d = d3.geoDistance(coords, center as [number, number]);
-      const isVisible = d < 1.57; // ~90 degrees
-
-      return { ...story, projected, isVisible };
-    }).filter(s => s.isVisible && s.projected);
-
-    // 5. Draw Markers with Animation
-    const markersGroup = svg.append("g");
-
-    // Group for each marker to hold halo and core
-    const markerNodes = markersGroup.selectAll("g")
-      .data(visibleDots)
-      .enter().append("g")
-      .attr("transform", d => `translate(${d.projected![0]}, ${d.projected![1]})`)
-      .attr("class", "cursor-pointer")
-      .on("click", (event, d) => {
-        if (!isDraggingRef.current) {
-          event.stopPropagation();
-          onStoryClick(d);
+              rotationRef.current = nextRotation;
+              drawGlobe(); // Direct draw
+            });
+          }
         }
       });
 
-    // Pulsing Halo (Animation)
-    markerNodes.append("circle")
-      .attr("r", 5) // Base radius for halo
-      .attr("fill", d => CATEGORY_COLORS[d.category])
-      .attr("class", "pin-glow pointer-events-none")
-      .style("will-change", "transform, opacity"); // Optimization hint
+    svg.call(drag);
+    svg.on("dblclick.zoom", null);
 
-    // Solid Core
-    markerNodes.append("circle")
-      .attr("r", 3)
-      .attr("fill", d => CATEGORY_COLORS[d.category])
-      .attr("stroke", "white")
-      .attr("stroke-width", 1)
-      .style("filter", "drop-shadow(0 0 4px rgba(255,255,255,0.5))");
-
-    // 6. Interaction Overlay for Hover Logic
+    // Hover Logic (Optimized)
     svg.on("mousemove", (event) => {
-      // Don't calculate hover during drag for performance
-      if (isDraggingRef.current) return;
+      // Skip if dragging or pressing (performance)
+      if (isDraggingRef.current || isPressingRef.current) return;
+
+      // Throttle hover checks (every 50ms)
+      const now = Date.now();
+      if (now - lastDrawTimeRef.current < 50) return;
+      lastDrawTimeRef.current = now;
 
       const [x, y] = d3.pointer(event);
-      const coords = projection.invert!([x, y]);
+      const coords = projectionRef.current.invert!([x, y]);
 
       setHoverPos({ x: event.clientX, y: event.clientY });
 
@@ -246,16 +326,16 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
         return;
       }
 
-      // Check which country contains the point
       const found = worldData.features.find((feature: any) => {
         return d3.geoContains(feature, coords);
       });
 
       if (found) {
         const name = countryNames.get(found.id);
-        if (name !== hoveredCountry) setHoveredCountry(name || null);
+        // Only update state if changed
+        setHoveredCountry(prev => (prev !== name ? (name || null) : prev));
       } else {
-        if (hoveredCountry) setHoveredCountry(null);
+        setHoveredCountry(prev => (prev ? null : prev));
       }
     });
 
@@ -263,13 +343,13 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       setHoveredCountry(null);
     });
 
-    // Map Click Handler (Add Mode)
+    // Click Handler
     svg.on("click", (event) => {
       if (isDraggingRef.current) return;
 
-      if (isAddingMode) {
+      if (isAddingModeRef.current) {
         const [x, y] = d3.pointer(event);
-        const coords = projection.invert!([x, y]);
+        const coords = projectionRef.current.invert!([x, y]);
         if (coords) {
           const found = worldData.features.find((feature: any) => {
             return d3.geoContains(feature, coords);
@@ -280,12 +360,17 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       }
     });
 
-  }, [worldData, rotation, zoomLevel, stories, isAddingMode, onStoryClick, onMapClick, countryNames]); // Removed hoveredCountry from deps
+    return () => {
+      svg.on(".drag", null);
+      svg.on(".zoom", null);
+      if (momentumTimerRef.current) momentumTimerRef.current.stop();
+    };
+  }, [worldData, drawGlobe, countryNames]); // Re-bind if data changes
 
   // Separate Effect for Hover Styling (Performance Optimization)
+  // This runs when hoveredCountry changes, but doesn't redraw the whole globe geometry
   useEffect(() => {
     if (!svgRef.current || !worldData) return;
-
     const svg = d3.select(svgRef.current);
 
     svg.selectAll(".country-path")
@@ -304,6 +389,23 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
 
   }, [hoveredCountry, countryNames, worldData]);
 
+  // Manual Zoom Handlers
+  const handleZoomIn = () => {
+    if (svgRef.current && zoomBehaviorRef.current) {
+      d3.select(svgRef.current)
+        .transition().duration(300)
+        .call(zoomBehaviorRef.current.scaleBy, 1.5);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (svgRef.current && zoomBehaviorRef.current) {
+      d3.select(svgRef.current)
+        .transition().duration(300)
+        .call(zoomBehaviorRef.current.scaleBy, 0.66);
+    }
+  };
+
   return (
     <div ref={wrapperRef} className={`w-full h-full relative ${isAddingMode ? 'cursor-crosshair' : 'cursor-grab'}`}>
       <style>{ANIMATION_STYLES}</style>
@@ -315,8 +417,30 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
         </div>
       )}
 
+      {/* Zoom Controls */}
+      <div className="absolute bottom-8 right-4 flex flex-col gap-2 z-40">
+        <button
+          onClick={handleZoomIn}
+          className="w-10 h-10 bg-slate-800/80 backdrop-blur text-white rounded-full border border-gray-600 flex items-center justify-center hover:bg-slate-700 hover:border-neon-blue transition-all shadow-lg active:scale-95"
+          aria-label="Zoom In"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+        <button
+          onClick={handleZoomOut}
+          className="w-10 h-10 bg-slate-800/80 backdrop-blur text-white rounded-full border border-gray-600 flex items-center justify-center hover:bg-slate-700 hover:border-neon-blue transition-all shadow-lg active:scale-95"
+          aria-label="Zoom Out"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+          </svg>
+        </button>
+      </div>
+
       {/* Floating Neon Tooltip */}
-      {hoveredCountry && hoverPos && !isDraggingRef.current && (
+      {hoveredCountry && hoverPos && !isDraggingRef.current && !isPressingRef.current && (
         <div
           className="fixed pointer-events-none z-50 flex flex-col items-center transition-opacity duration-200"
           style={{
