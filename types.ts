@@ -33,6 +33,7 @@ export interface Story {
   country?: string;
   reactionCount?: number;
   views?: number;
+  createdAt?: string;
 }
 
 export interface FilterState {

@@ -80,7 +80,7 @@ const App: React.FC = () => {
   const handleSaveStory = async (newStoryData: Omit<Story, 'id'>) => {
     // Optimistic Update
     const tempId = `temp-${Date.now()}`;
-    const optimisticStory = { ...newStoryData, id: tempId };
+    const optimisticStory = { ...newStoryData, id: tempId, createdAt: new Date().toISOString() };
     setStories(prev => [optimisticStory, ...prev]);
 
     setNewPinLocation(null);

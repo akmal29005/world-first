@@ -178,9 +178,10 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
         }
       });
 
+    // Pulse Circle (Only for new stories < 24h)
     markersEnter.append("circle")
       .attr("r", 5)
-      .attr("class", "pin-glow pointer-events-none");
+      .attr("class", "pulse-circle pointer-events-none");
 
     markersEnter.append("circle")
       .attr("r", 3)
@@ -192,11 +193,17 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
     markers.merge(markersEnter as any)
       .attr("transform", d => `translate(${d.projected![0]}, ${d.projected![1]})`);
 
-    // Update colors (in case category changes or new stories)
-    markers.merge(markersEnter as any).select(".pin-glow")
-      .attr("fill", d => CATEGORY_COLORS[d.category]);
+    // Update colors and pulse visibility
+    const markersUpdate = markers.merge(markersEnter as any);
 
-    markers.merge(markersEnter as any).select("circle:not(.pin-glow)")
+    markersUpdate.select(".pulse-circle")
+      .attr("fill", d => CATEGORY_COLORS[d.category])
+      .attr("class", d => {
+        const isNew = d.createdAt && (Date.now() - new Date(d.createdAt).getTime() < 24 * 60 * 60 * 1000);
+        return `pulse-circle pointer-events-none ${isNew ? 'pin-glow' : 'opacity-0'}`;
+      });
+
+    markersUpdate.select("circle:not(.pulse-circle)")
       .attr("fill", d => CATEGORY_COLORS[d.category]);
 
     markers.exit().remove();
