@@ -7,6 +7,9 @@ import TutorialOverlay from './components/TutorialOverlay';
 import DiscoveryPanel from './components/DiscoveryPanel';
 import { GlobeLoader, EmptyState } from './components/LoadingStates';
 import { Story, Category } from './types';
+import TimeSlider from './components/TimeSlider';
+import AmbientSound from './components/AmbientSound';
+import LiveFeed from './components/LiveFeed';
 
 interface NewPinState {
   lat: number;
@@ -23,6 +26,11 @@ const App: React.FC = () => {
   const [newPinLocation, setNewPinLocation] = useState<NewPinState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showRecent, setShowRecent] = useState(false);
+  const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+
+  // Time Travel State
+  const [yearRange, setYearRange] = useState<[number, number]>([1950, new Date().getFullYear()]);
 
   // Initialize with DB data and Static stories
   useEffect(() => {
@@ -136,12 +144,17 @@ const App: React.FC = () => {
       result = result.filter(s => s.year >= currentYear - 1);
     }
 
-    // 2. Filter by Category
+    // 2. Filter by Year Range (Time Travel)
+    if (!showRecent) { // Only apply time travel if not showing "Recent"
+      result = result.filter(s => s.year >= yearRange[0] && s.year <= yearRange[1]);
+    }
+
+    // 3. Filter by Category
     if (filter !== 'ALL') {
       result = result.filter(s => s.category === filter);
     }
 
-    // 3. Filter by Search Query
+    // 4. Filter by Search Query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(s =>
@@ -154,7 +167,7 @@ const App: React.FC = () => {
     }
 
     return result;
-  }, [stories, filter, searchQuery, showRecent]);
+  }, [stories, filter, searchQuery, showRecent, yearRange]);
 
   // Random story handler
   const handleRandomStory = useCallback(() => {
@@ -175,9 +188,11 @@ const App: React.FC = () => {
     setFilter('ALL');
     setSearchQuery('');
     setShowRecent(false);
+    setIsTimeTravelOpen(false);
+    setShowHeatmap(false);
   }, []);
 
-  const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent;
+  const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent || isTimeTravelOpen || showHeatmap;
 
   return (
     <div className="relative w-screen h-screen bg-space text-white overflow-hidden font-sans selection:bg-neon-blue selection:text-white">
@@ -200,13 +215,32 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Live Feed Ticker */}
+      {!isLoading && !isAddingMode && (
+        <LiveFeed stories={stories} />
+      )}
+
       {/* Discovery Panel */}
       <DiscoveryPanel
         stories={visibleStories}
         onRandomStory={handleRandomStory}
         showRecent={showRecent}
-        onToggleRecent={() => setShowRecent(!showRecent)}
+        onToggleRecent={() => {
+          setShowRecent(!showRecent);
+          if (!showRecent) setIsTimeTravelOpen(false); // Close time travel if opening recent
+        }}
       />
+
+      {/* Time Slider (Only show if NOT in "Recent" mode, NOT adding, and Time Travel is OPEN) */}
+      {isTimeTravelOpen && !showRecent && !isAddingMode && !isLoading && (
+        <TimeSlider
+          minYear={1950}
+          maxYear={new Date().getFullYear()}
+          startYear={yearRange[0]}
+          endYear={yearRange[1]}
+          onChange={(start, end) => setYearRange([start, end])}
+        />
+      )}
 
       {/* Instruction Toast for Adding Mode */}
       {isAddingMode && !newPinLocation && (
@@ -236,6 +270,7 @@ const App: React.FC = () => {
             onStoryClick={handleStoryClick}
             onMapClick={handleMapClick}
             isAddingMode={isAddingMode}
+            showHeatmap={showHeatmap}
           />
         )}
       </div>
@@ -249,6 +284,13 @@ const App: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onRandomStory={handleRandomStory}
+        isTimeTravelOpen={isTimeTravelOpen}
+        onToggleTimeTravel={() => {
+          setIsTimeTravelOpen(!isTimeTravelOpen);
+          if (!isTimeTravelOpen) setShowRecent(false); // Close recent if opening time travel
+        }}
+        showHeatmap={showHeatmap}
+        onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
       />
 
       {selectedStory && (
@@ -268,6 +310,9 @@ const App: React.FC = () => {
           onCancel={() => setNewPinLocation(null)}
         />
       )}
+
+      {/* Ambient Sound Controller */}
+      <AmbientSound />
 
     </div>
   );

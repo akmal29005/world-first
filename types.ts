@@ -21,6 +21,18 @@ export const CATEGORY_ICONS: Record<Category, string> = {
   [Category.OTHER]: '✨'
 };
 
+// Category color mapping (Neon Palette)
+export const CATEGORY_COLORS: Record<Category, string> = {
+  [Category.FIRST_HEARTBREAK]: '#ef4444', // Red-500
+  [Category.FIRST_JOB]: '#f59e0b',        // Amber-500
+  [Category.FIRST_OCEAN]: '#0ea5e9',      // Sky-500
+  [Category.FIRST_TRAVEL]: '#8b5cf6',     // Violet-500
+  [Category.FIRST_HOME]: '#10b981',       // Emerald-500
+  [Category.FIRST_LOSS]: '#64748b',       // Slate-500
+  [Category.FIRST_ACHIEVEMENT]: '#eab308', // Yellow-500
+  [Category.OTHER]: '#ec4899'             // Pink-500
+};
+
 export interface Story {
   id: string;
   category: Category;
