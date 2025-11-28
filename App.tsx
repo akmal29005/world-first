@@ -55,6 +55,7 @@ const App: React.FC = () => {
       }
 
       // 2. Static Stories (Client-side fallback)
+
       const staticStories: Story[] = [
         {
           id: 'static-1',
