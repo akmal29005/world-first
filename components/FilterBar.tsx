@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Category } from '../types';
+import { Category, CATEGORY_ICONS } from '../types';
 
 interface FilterBarProps {
   selected: Category | 'ALL';
@@ -70,7 +70,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
             {/* Filter Buttons */}
             <div className="space-y-2">
               <p className="text-xs text-gray-400 uppercase tracking-wider font-bold px-1">Filters</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
                 <FilterButton
                   active={selected === 'ALL'}
                   onClick={() => { onSelect('ALL'); setIsMenuOpen(false); }}
@@ -82,6 +82,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                     active={selected === cat}
                     onClick={() => { onSelect(cat); setIsMenuOpen(false); }}
                     label={cat.replace('First ', '')}
+                    icon={CATEGORY_ICONS[cat]}
                   />
                 ))}
               </div>
@@ -173,6 +174,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
                   active={selected === cat}
                   onClick={() => onSelect(cat)}
                   label={cat.replace('First ', '')}
+                  icon={CATEGORY_ICONS[cat]}
                 />
               ))}
             </div>
@@ -223,20 +225,21 @@ const FilterBar: React.FC<FilterBarProps> = ({
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-2 items-center">
+          {/* Filters - Scrollable */}
+          <div className="flex gap-2 items-center overflow-x-auto scrollbar-hide flex-nowrap max-w-md">
             <FilterButton
               active={selected === 'ALL'}
               onClick={() => onSelect('ALL')}
               label="All"
             />
-            <div className="w-px bg-white/10 h-4"></div>
+            <div className="w-px bg-white/10 h-4 flex-shrink-0"></div>
             {Object.values(Category).map((cat) => (
               <FilterButton
                 key={cat}
                 active={selected === cat}
                 onClick={() => onSelect(cat)}
                 label={cat.replace('First ', '')}
+                icon={CATEGORY_ICONS[cat]}
               />
             ))}
           </div>
@@ -250,17 +253,19 @@ interface FilterButtonProps {
   active: boolean;
   onClick: () => void;
   label: string;
+  icon?: string;
 }
 
-const FilterButton: React.FC<FilterButtonProps> = ({ active, onClick, label }) => (
+const FilterButton: React.FC<FilterButtonProps> = ({ active, onClick, label, icon }) => (
   <button
     onClick={onClick}
-    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 border border-transparent
+    className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap flex-shrink-0 border border-transparent flex items-center gap-1
       ${active
         ? 'bg-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] border-white/20'
         : 'text-gray-400 hover:text-white hover:bg-white/5'
       }`}
   >
+    {icon && <span className="text-sm">{icon}</span>}
     {label}
   </button>
 );

@@ -3,8 +3,23 @@ export enum Category {
   FIRST_JOB = 'First Job',
   FIRST_OCEAN = 'First Ocean',
   FIRST_TRAVEL = 'First Travel',
+  FIRST_HOME = 'First Home',
+  FIRST_LOSS = 'First Loss',
+  FIRST_ACHIEVEMENT = 'First Achievement',
   OTHER = 'Other'
 }
+
+// Category icon mapping
+export const CATEGORY_ICONS: Record<Category, string> = {
+  [Category.FIRST_HEARTBREAK]: '💔',
+  [Category.FIRST_JOB]: '💼',
+  [Category.FIRST_OCEAN]: '🌊',
+  [Category.FIRST_TRAVEL]: '✈️',
+  [Category.FIRST_HOME]: '🏡',
+  [Category.FIRST_LOSS]: '🕊️',
+  [Category.FIRST_ACHIEVEMENT]: '🏆',
+  [Category.OTHER]: '✨'
+};
 
 export interface Story {
   id: string;
@@ -16,6 +31,8 @@ export interface Story {
   city?: string;
   state?: string;
   country?: string;
+  reactionCount?: number;
+  views?: number;
 }
 
 export interface FilterState {

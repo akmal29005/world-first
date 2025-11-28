@@ -3,6 +3,9 @@ import Globe from './components/Globe';
 import StoryCard from './components/StoryCard';
 import StoryForm from './components/StoryForm';
 import FilterBar from './components/FilterBar';
+import TutorialOverlay from './components/TutorialOverlay';
+import DiscoveryPanel from './components/DiscoveryPanel';
+import { GlobeLoader, EmptyState } from './components/LoadingStates';
 import { Story, Category } from './types';
 
 interface NewPinState {
@@ -18,10 +21,13 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [newPinLocation, setNewPinLocation] = useState<NewPinState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showRecent, setShowRecent] = useState(false);
 
   // Initialize with DB data and Static stories
   useEffect(() => {
     const init = async () => {
+      setIsLoading(true);
       let dbStories: Story[] = [];
 
       // 1. Fetch from Database (Neon via Vercel Postgres)
@@ -53,6 +59,7 @@ const App: React.FC = () => {
 
       // Combine database and static stories
       setStories([...dbStories, ...staticStories]);
+      setIsLoading(false);
     };
     init();
   }, []);
@@ -113,12 +120,19 @@ const App: React.FC = () => {
   const visibleStories = useMemo(() => {
     let result = stories;
 
-    // 1. Filter by Category
+    // 1. Filter by Recent (last 30 days)
+    if (showRecent) {
+      const currentYear = new Date().getFullYear();
+      // Since we don't have created_at, approximate using year
+      result = result.filter(s => s.year >= currentYear - 1);
+    }
+
+    // 2. Filter by Category
     if (filter !== 'ALL') {
       result = result.filter(s => s.category === filter);
     }
 
-    // 2. Filter by Search Query
+    // 3. Filter by Search Query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(s =>
@@ -131,13 +145,39 @@ const App: React.FC = () => {
     }
 
     return result;
-  }, [stories, filter, searchQuery]);
+  }, [stories, filter, searchQuery, showRecent]);
+
+  // Random story handler
+  const handleRandomStory = useCallback(() => {
+    if (visibleStories.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * visibleStories.length);
+    setSelectedStory(visibleStories[randomIndex]);
+  }, [visibleStories]);
+
+  // Reaction handler
+  const handleReaction = useCallback((storyId: string, reaction: string) => {
+    console.log(`Story ${storyId} received reaction: ${reaction}`);
+    // TODO: Send to API endpoint when implemented
+    // For now, just log it
+  }, []);
+
+  // Reset filters
+  const handleResetFilters = useCallback(() => {
+    setFilter('ALL');
+    setSearchQuery('');
+    setShowRecent(false);
+  }, []);
+
+  const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent;
 
   return (
     <div className="relative w-screen h-screen bg-space text-white overflow-hidden font-sans selection:bg-neon-blue selection:text-white">
 
       {/* Background Gradient */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/20 via-slate-900/50 to-space pointer-events-none" />
+
+      {/* Tutorial Overlay */}
+      <TutorialOverlay />
 
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 p-8 flex justify-between items-start pointer-events-none z-30">
@@ -151,7 +191,15 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Instruction Toast for Adding Mode - Moved to TOP CENTER */}
+      {/* Discovery Panel */}
+      <DiscoveryPanel
+        stories={visibleStories}
+        onRandomStory={handleRandomStory}
+        showRecent={showRecent}
+        onToggleRecent={() => setShowRecent(!showRecent)}
+      />
+
+      {/* Instruction Toast for Adding Mode */}
       {isAddingMode && !newPinLocation && (
         <div className="absolute top-28 left-1/2 transform -translate-x-1/2 pointer-events-none z-50 w-full flex justify-center px-4">
           <div className="bg-slate-900/90 text-neon-blue px-6 py-3 rounded-full backdrop-blur-md border border-neon-blue/30 shadow-[0_0_15px_rgba(14,165,233,0.3)] animate-[bounce_2s_infinite]">
@@ -165,12 +213,22 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <div className="absolute inset-0 z-10">
-        <Globe
-          stories={visibleStories}
-          onStoryClick={handleStoryClick}
-          onMapClick={handleMapClick}
-          isAddingMode={isAddingMode}
-        />
+        {isLoading ? (
+          <GlobeLoader />
+        ) : visibleStories.length === 0 ? (
+          <EmptyState
+            hasFilters={hasActiveFilters}
+            onReset={handleResetFilters}
+            onAddStory={handleAddModeToggle}
+          />
+        ) : (
+          <Globe
+            stories={visibleStories}
+            onStoryClick={handleStoryClick}
+            onMapClick={handleMapClick}
+            isAddingMode={isAddingMode}
+          />
+        )}
       </div>
 
       {/* Overlays */}
@@ -187,6 +245,7 @@ const App: React.FC = () => {
         <StoryCard
           story={selectedStory}
           onClose={() => setSelectedStory(null)}
+          onReact={handleReaction}
         />
       )}
 
