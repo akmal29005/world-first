@@ -418,7 +418,7 @@ const Globe: React.FC<GlobeProps> = ({ stories, onStoryClick, onMapClick, isAddi
       )}
 
       {/* Zoom Controls */}
-      <div className="absolute bottom-8 right-4 flex flex-col gap-2 z-40">
+      <div className="absolute bottom-28 right-4 flex flex-col gap-2 z-40">
         <button
           onClick={handleZoomIn}
           className="w-10 h-10 bg-slate-800/80 backdrop-blur text-white rounded-full border border-gray-600 flex items-center justify-center hover:bg-slate-700 hover:border-neon-blue transition-all shadow-lg active:scale-95"
