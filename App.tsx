@@ -34,7 +34,11 @@ const App: React.FC = () => {
       try {
         const res = await fetch('/api/stories');
         if (res.ok) {
-          dbStories = await res.json();
+          const rawStories = await res.json();
+          dbStories = rawStories.map((s: any) => ({
+            ...s,
+            createdAt: s.created_at || s.createdAt // Handle both cases
+          }));
         } else {
           console.error("Failed to fetch stories");
         }
@@ -53,7 +57,8 @@ const App: React.FC = () => {
           lng: 151.2093,
           city: "Sydney",
           state: "NSW",
-          country: "Australia"
+          country: "Australia",
+          createdAt: new Date().toISOString() // Make static story "new" for testing if needed
         }
       ];
 
@@ -95,7 +100,11 @@ const App: React.FC = () => {
       });
 
       if (res.ok) {
-        const savedStory = await res.json();
+        const savedRaw = await res.json();
+        const savedStory = {
+          ...savedRaw,
+          createdAt: savedRaw.created_at || savedRaw.createdAt
+        };
         // Replace optimistic story with real one
         setStories(prev => prev.map(s => s.id === tempId ? savedStory : s));
         setSelectedStory(savedStory);
