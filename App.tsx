@@ -9,6 +9,7 @@ import { GlobeLoader, EmptyState } from './components/LoadingStates';
 import { Story, Category } from './types';
 import TimeSlider from './components/TimeSlider';
 import AmbientSound from './components/AmbientSound';
+import { useHaptics } from './hooks/useHaptics';
 
 interface NewPinState {
   lat: number;
@@ -37,6 +38,8 @@ const App: React.FC = () => {
 
   // Time Travel State
   const [yearRange, setYearRange] = useState<[number, number]>([1950, new Date().getFullYear()]);
+
+  const { triggerSuccess } = useHaptics();
 
   // Initialize with DB data and Static stories
   useEffect(() => {

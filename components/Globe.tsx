@@ -3,6 +3,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
 import { Story, Category, CATEGORY_COLORS } from '../types';
+import { useGyroscope } from '../hooks/useGyroscope';
+import { useHaptics } from '../hooks/useHaptics';
 
 interface GlobeProps {
   stories: Story[];
@@ -27,6 +29,10 @@ const Globe: React.FC<GlobeProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  // Hooks
+  const { x: gyroX, y: gyroY, requestPermission: requestGyroPermission } = useGyroscope();
+  const { triggerImpact } = useHaptics();
 
   // Refs for animation state (mutable, won't trigger re-renders)
   const rotationRef = useRef<[number, number]>([0, 0]);
@@ -106,6 +112,7 @@ const Globe: React.FC<GlobeProps> = ({
       .attr("class", "cursor-move")
       .on("click", (event) => {
         if (!isDraggingRef.current && isAddingMode) {
+          triggerImpact('medium'); // Haptic feedback
           const [x, y] = d3.pointer(event);
           const coords = projection.invert!([x, y]);
           if (coords) onMapClick(coords[1], coords[0]);
@@ -122,6 +129,7 @@ const Globe: React.FC<GlobeProps> = ({
       .attr("class", isAddingMode ? "cursor-crosshair hover:fill-slate-600 transition-colors" : "cursor-move")
       .on("click", (event, d: any) => {
         if (!isDraggingRef.current && isAddingMode) {
+          triggerImpact('medium'); // Haptic feedback
           const [x, y] = d3.pointer(event);
           const coords = projection.invert!([x, y]);
           if (coords) onMapClick(coords[1], coords[0], d.properties.name);
@@ -150,7 +158,7 @@ const Globe: React.FC<GlobeProps> = ({
       // Logic: 
       // 1. If dragging -> User controls rotation
       // 2. If selectedStory -> Auto-rotate to target
-      // 3. If idle -> Apply momentum or auto-rotate slowly
+      // 3. If idle -> Apply momentum or auto-rotate slowly OR Gyroscope
 
       if (isDraggingRef.current) {
         // Handled by drag behavior
@@ -174,6 +182,18 @@ const Globe: React.FC<GlobeProps> = ({
         // Stop momentum
         velocityRef.current = [0, 0];
       } else {
+        // Gyroscope Influence (if available and not dragging)
+        // gyroX (gamma) -> Rotate Y (Longitude)
+        // gyroY (beta) -> Rotate X (Latitude)
+        // Sensitivity factor
+        const gyroSensitivity = 0.05;
+
+        // Only apply if significant tilt to avoid drift
+        if (Math.abs(gyroX) > 2 || Math.abs(gyroY) > 2) {
+          rotationRef.current[0] += gyroX * gyroSensitivity;
+          rotationRef.current[1] += gyroY * gyroSensitivity;
+        }
+
         // Momentum
         velocityRef.current[0] *= 0.95;
         velocityRef.current[1] *= 0.95;
@@ -324,6 +344,7 @@ const Globe: React.FC<GlobeProps> = ({
         .on("click", (event, d) => {
           if (!isDraggingRef.current) {
             event.stopPropagation();
+            triggerImpact('light'); // Haptic feedback
             onStoryClick(d);
           }
         });
@@ -381,6 +402,10 @@ const Globe: React.FC<GlobeProps> = ({
         lastPosRef.current = [event.x, event.y];
         startPosRef.current = [event.x, event.y];
         targetRotationRef.current = null; // Cancel auto-rotation on user interact
+        triggerImpact('light'); // Haptic feedback start
+
+        // Request Gyro permission on first interaction if needed
+        requestGyroPermission();
       })
       .on("drag", (event) => {
         if (!lastPosRef.current || !startPosRef.current) return;
@@ -423,12 +448,13 @@ const Globe: React.FC<GlobeProps> = ({
       svg.on(".drag", null);
     };
 
-  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory]); // Re-run if these change
+  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory, gyroX, gyroY, requestGyroPermission, triggerImpact]); // Re-run if these change
 
   // Zoom Handlers
   const handleZoom = useCallback((delta: number) => {
     scaleRef.current = Math.max(100, Math.min(2000, scaleRef.current + delta));
-  }, []);
+    triggerImpact('light'); // Haptic feedback
+  }, [triggerImpact]);
 
   return (
     <div ref={containerRef} className="w-full h-full relative">
@@ -436,6 +462,8 @@ const Globe: React.FC<GlobeProps> = ({
         ref={svgRef}
         className="w-full h-full block"
       />
+
+
 
       {/* Zoom Controls */}
       <div className="absolute bottom-28 right-4 flex flex-col gap-2 z-20 pointer-events-auto">

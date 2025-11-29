@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Category, CATEGORY_ICONS } from '../types';
 
 interface FilterBarProps {
@@ -31,14 +31,22 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onHover
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowTooltip(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <>
       {/* MOBILE: Hamburger Menu (< 768px) */}
       <div className="md:hidden absolute top-6 right-4 z-50 pointer-events-auto">
-        {/* Tooltip - Only show when menu is closed */}
-        {!isMenuOpen && (
-          <div className="absolute -bottom-10 right-0 bg-slate-900/95 text-gray-300 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap backdrop-blur-md border border-white/10 shadow-lg pointer-events-none">
+        {/* Tooltip - Only show when menu is closed and timer hasn't expired */}
+        {!isMenuOpen && showTooltip && (
+          <div className="absolute -bottom-10 right-0 bg-slate-900/95 text-gray-300 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap backdrop-blur-md border border-white/10 shadow-lg pointer-events-none animate-pulse">
             Click to add stories
           </div>
         )}
@@ -61,110 +69,111 @@ const FilterBar: React.FC<FilterBarProps> = ({
         </button>
 
         {/* Mobile Menu Dropdown */}
-        {isMenuOpen && (
-          <div className="absolute top-16 right-0 w-80 max-w-[calc(100vw-2rem)] bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl p-4 space-y-4 pointer-events-auto">
-            {/* Search Bar */}
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search stories..."
-                className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-lg leading-5 bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue text-sm"
+        <div className={`absolute top-16 right-0 w-80 max-w-[calc(100vw-2rem)] bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl p-4 space-y-4 transition-all duration-300 ease-out origin-top-right ${isMenuOpen
+            ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+          }`}>
+          {/* Search Bar */}
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 text-gray-400 group-focus-within:text-neon-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search stories..."
+              className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-lg leading-5 bg-slate-800/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:bg-slate-900 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue text-sm"
+            />
+          </div>
+
+          {/* Filter Buttons */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 uppercase tracking-wider font-bold px-1">Filters</p>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+              <FilterButton
+                active={selected === 'ALL'}
+                onClick={() => { onSelect('ALL'); setIsMenuOpen(false); }}
+                label="All"
               />
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="space-y-2">
-              <p className="text-xs text-gray-400 uppercase tracking-wider font-bold px-1">Filters</p>
-              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+              {Object.values(Category).map((cat) => (
                 <FilterButton
-                  active={selected === 'ALL'}
-                  onClick={() => { onSelect('ALL'); setIsMenuOpen(false); }}
-                  label="All"
+                  key={cat}
+                  active={selected === cat}
+                  onClick={() => { onSelect(cat); setIsMenuOpen(false); }}
+                  label={cat.replace('First ', '')}
+                  icon={CATEGORY_ICONS[cat]}
+                  onMouseEnter={() => onHover(cat)}
+                  onMouseLeave={() => onHover(null)}
                 />
-                {Object.values(Category).map((cat) => (
-                  <FilterButton
-                    key={cat}
-                    active={selected === cat}
-                    onClick={() => { onSelect(cat); setIsMenuOpen(false); }}
-                    label={cat.replace('First ', '')}
-                    icon={CATEGORY_ICONS[cat]}
-                    onMouseEnter={() => onHover(cat)}
-                    onMouseLeave={() => onHover(null)}
-                  />
-                ))}
-              </div>
+              ))}
             </div>
+          </div>
 
-            {/* Heatmap Toggle (Mobile) */}
-            <button
-              onClick={() => { onToggleHeatmap(); setIsMenuOpen(false); }}
-              className={`w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2
+          {/* Heatmap Toggle (Mobile) */}
+          <button
+            onClick={() => { onToggleHeatmap(); setIsMenuOpen(false); }}
+            className={`w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2
                 ${showHeatmap
-                  ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]'
-                  : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-white/10'}`}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
-              </svg>
-              {showHeatmap ? 'HIDE HEATMAP' : 'SHOW HEATMAP'}
-            </button>
+                ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]'
+                : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-white/10'}`}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+            </svg>
+            {showHeatmap ? 'HIDE HEATMAP' : 'SHOW HEATMAP'}
+          </button>
 
-            {/* Time Travel Button (Mobile) */}
-            <button
-              onClick={() => { onToggleTimeTravel(); setIsMenuOpen(false); }}
-              className={`w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2
+          {/* Time Travel Button (Mobile) */}
+          <button
+            onClick={() => { onToggleTimeTravel(); setIsMenuOpen(false); }}
+            className={`w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2
                 ${isTimeTravelOpen
-                  ? 'bg-neon-blue text-white shadow-[0_0_15px_rgba(14,165,233,0.4)]'
-                  : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-white/10'}`}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {isTimeTravelOpen ? 'CLOSE TIME TRAVEL' : 'TIME TRAVEL'}
-            </button>
+                ? 'bg-neon-blue text-white shadow-[0_0_15px_rgba(14,165,233,0.4)]'
+                : 'bg-slate-800 text-gray-300 hover:bg-slate-700 border border-white/10'}`}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {isTimeTravelOpen ? 'CLOSE TIME TRAVEL' : 'TIME TRAVEL'}
+          </button>
 
-            {/* Random Story Button (Mobile) */}
-            <button
-              onClick={() => { onRandomStory(); setIsMenuOpen(false); }}
-              className="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2 border border-white/10"
-            >
-              <span>🎲</span>
-              RANDOM STORY
-            </button>
+          {/* Random Story Button (Mobile) */}
+          <button
+            onClick={() => { onRandomStory(); setIsMenuOpen(false); }}
+            className="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg flex items-center justify-center gap-2 border border-white/10"
+          >
+            <span>🎲</span>
+            RANDOM STORY
+          </button>
 
-            {/* Add Story Button */}
-            <button
-              onClick={() => { onAddClick(); setIsMenuOpen(false); }}
-              className={`
+          {/* Add Story Button */}
+          <button
+            onClick={() => { onAddClick(); setIsMenuOpen(false); }}
+            className={`
                 w-full px-6 py-3 rounded-lg font-bold text-sm tracking-widest transition-all duration-300 shadow-lg
                 flex items-center justify-center gap-2
                 ${isAddingMode
-                  ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
-                  : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
-                }`}
-            >
-              {isAddingMode ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  CANCEL
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  ADD STORY
-                </>
-              )}
-            </button>
-          </div>
-        )}
+                ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                : 'bg-white text-slate-900 hover:bg-gray-200 shadow-white/20'
+              }`}
+          >
+            {isAddingMode ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                CANCEL
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                ADD STORY
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* TABLET/IPAD: Top Bar (768px - 1024px) */}
