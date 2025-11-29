@@ -539,7 +539,8 @@ const Globe: React.FC<GlobeProps> = ({
     <div ref={containerRef} className="w-full h-full relative">
       <svg
         ref={svgRef}
-        className="w-full h-full block"
+        className="w-full h-full block touch-none cursor-move"
+        style={{ touchAction: 'none' }}
       />
 
 
