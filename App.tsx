@@ -95,14 +95,13 @@ const App: React.FC = () => {
     };
   }, [isTourActive, tourIndex, tourStories, stopTour]);
 
-  // Initialize with DB data and Static stories
+  // Initialize with DB data
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
       let dbStories: Story[] = [];
 
       // 1. Fetch from Database (Neon via Vercel Postgres)
-      /*
       try {
         const res = await fetch('/api/stories');
         if (res.ok) {
@@ -117,9 +116,12 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Error fetching stories", e);
       }
-      */
 
-      // 2. Static Stories (Client-side fallback)
+      setStories([...dbStories]);
+      setIsLoading(false);
+
+      /*
+      // Static Stories (Client-side fallback for testing)
       const staticStories: Story[] = [
         {
           id: 'static-1',
@@ -193,7 +195,6 @@ const App: React.FC = () => {
           country: "USA",
           createdAt: new Date().toISOString()
         },
-        // Add more static stories for better testing coverage
         {
           id: 'static-7',
           category: Category.FIRST_LOVE,
@@ -219,10 +220,9 @@ const App: React.FC = () => {
           createdAt: new Date().toISOString()
         }
       ];
-
-      // Combine database and static stories
-      setStories([...staticStories]);
-      setIsLoading(false);
+      // Uncomment to use static stories:
+      // setStories([...staticStories]);
+      */
     };
     init();
   }, []);
@@ -329,7 +329,13 @@ const App: React.FC = () => {
     setShowRecent(false);
     setIsTimeTravelOpen(false);
     setShowHeatmap(false);
-  }, [isTourActive, stopTour]);
+
+    if (stories.length > 0) {
+      const randomIndex = Math.floor(Math.random() * stories.length);
+      const randomStory = stories[randomIndex];
+      setSelectedStory(randomStory);
+    }
+  }, [isTourActive, stopTour, stories]);
 
   // Reaction handler
   const handleReaction = useCallback(async (storyId: string, reaction: string) => {

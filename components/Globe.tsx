@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
@@ -20,30 +19,39 @@ interface GlobeProps {
   selectedStory: Story | null;
 }
 
-const Globe: React.FC<GlobeProps> = ({
-  stories,
-  onStoryClick,
-  onMapClick,
-  isAddingMode,
-  showHeatmap = false,
-  showDayNight = true,
-  showConstellations = true,
-  enableGyro = false,
-  hoveredCategory,
-  selectedCategory,
-  selectedStory
-}) => {
+const Globe: React.FC<GlobeProps> = (props) => {
+  const {
+    stories,
+    onStoryClick,
+    onMapClick,
+    isAddingMode,
+    showHeatmap = false,
+    showDayNight = true,
+    showConstellations = true,
+    enableGyro = false,
+    hoveredCategory,
+    selectedCategory,
+    selectedStory
+  } = props;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Keep latest props in a ref to access them in the d3 timer without re-running the effect
+  const propsRef = useRef(props);
+  propsRef.current = props;
+
   // Hooks
   const { x: gyroX, y: gyroY, requestPermission: requestGyroPermission } = useGyroscope();
+  const gyroRef = useRef({ x: 0, y: 0 });
+  gyroRef.current = { x: gyroX || 0, y: gyroY || 0 };
+
   const { triggerImpact } = useHaptics();
 
-  // Refs for animation state (mutable, won't trigger re-renders)
+  // Refs for animation state
   const rotationRef = useRef<[number, number]>([0, 0]);
   const targetRotationRef = useRef<[number, number] | null>(null);
-  const scaleRef = useRef<number>(0); // Will be set on init
+  const scaleRef = useRef<number>(0);
   const velocityRef = useRef<[number, number]>([0, 0]);
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef<[number, number] | null>(null);
@@ -55,7 +63,13 @@ const Globe: React.FC<GlobeProps> = ({
   const categoryHoverStartTimeRef = useRef<number>(0);
 
   const [worldData, setWorldData] = useState<any>(null);
-  const [hoveredCountry, setHoveredCountry] = useState<any>(null); // Track hovered/clicked country
+  const [hoveredCountry, setHoveredCountry] = useState<any>(null);
+  const hoveredCountryRef = useRef<any>(null); // Ref for loop access
+
+  // Sync hoveredCountry state to ref
+  useEffect(() => {
+    hoveredCountryRef.current = hoveredCountry;
+  }, [hoveredCountry]);
 
   // Load TopoJSON data
   useEffect(() => {
@@ -66,17 +80,16 @@ const Globe: React.FC<GlobeProps> = ({
       });
   }, []);
 
-  // Initialize Scale based on screen size
+  // Initialize Scale
   useEffect(() => {
     const width = window.innerWidth;
     const height = window.innerHeight;
     scaleRef.current = Math.min(width, height) / 2.5;
   }, []);
 
-  // Handle Selected Story Rotation (Journey Mode)
+  // Handle Selected Story Rotation
   useEffect(() => {
     if (selectedStory) {
-      // D3 Rotation is [-lng, -lat]
       targetRotationRef.current = [-selectedStory.lng, -selectedStory.lat];
     } else {
       targetRotationRef.current = null;
@@ -102,7 +115,7 @@ const Globe: React.FC<GlobeProps> = ({
     const particlesGroup = svg.append("g").attr("class", "particles-group");
     const heatmapGroup = svg.append("g").attr("class", "heatmap-group");
     const markersGroup = svg.append("g").attr("class", "markers-group");
-    const labelsGroup = svg.append("g").attr("class", "labels-group"); // New labels group
+    const labelsGroup = svg.append("g").attr("class", "labels-group");
 
     // Projection setup
     const projection = d3.geoOrthographic()
@@ -120,11 +133,12 @@ const Globe: React.FC<GlobeProps> = ({
       .attr("class", "cursor-move")
       .on("click", (event) => {
         if (!isDraggingRef.current) {
-          // Clear hovered country on water click (mobile dismissal)
-          setHoveredCountry(null);
+          setHoveredCountry(null); // Update state to trigger re-render of overlay if needed
+          hoveredCountryRef.current = null;
 
+          const { isAddingMode, onMapClick } = propsRef.current;
           if (isAddingMode) {
-            triggerImpact('medium'); // Haptic feedback
+            triggerImpact('medium');
             const [x, y] = d3.pointer(event);
             const coords = projection.invert!([x, y]);
             if (coords) onMapClick(coords[1], coords[0]);
@@ -139,28 +153,31 @@ const Globe: React.FC<GlobeProps> = ({
       .attr("fill", "#1e293b")
       .attr("stroke", "#334155")
       .attr("stroke-width", 0.5)
-      .attr("class", isAddingMode ? "cursor-crosshair hover:fill-slate-600 transition-colors" : "cursor-move hover:fill-slate-700 transition-colors") // Added hover effect
+      .attr("class", "cursor-move hover:fill-slate-700 transition-colors")
       .on("mouseover", (event, d: any) => {
-        // Desktop hover
         if (!isDraggingRef.current && window.matchMedia("(hover: hover)").matches) {
+          hoveredCountryRef.current = d;
           setHoveredCountry(d);
         }
       })
       .on("mouseout", () => {
-        // Desktop hover out
         if (window.matchMedia("(hover: hover)").matches) {
+          hoveredCountryRef.current = null;
           setHoveredCountry(null);
         }
       })
       .on("click", (event, d: any) => {
         if (!isDraggingRef.current) {
-          // Mobile/Tap interaction: Toggle or Set
+          const { isAddingMode, onMapClick } = propsRef.current;
+
           if (!isAddingMode) {
-            setHoveredCountry((prev: any) => (prev === d ? null : d));
+            const newVal = (hoveredCountryRef.current === d) ? null : d;
+            hoveredCountryRef.current = newVal;
+            setHoveredCountry(newVal);
           }
 
           if (isAddingMode) {
-            triggerImpact('medium'); // Haptic feedback
+            triggerImpact('medium');
             const [x, y] = d3.pointer(event);
             const coords = projection.invert!([x, y]);
             if (coords) onMapClick(coords[1], coords[0], d.properties.name);
@@ -168,32 +185,23 @@ const Globe: React.FC<GlobeProps> = ({
         }
       });
 
-    // 3. Night Cycle Setup
-    if (showDayNight) {
-      const now = new Date();
-      const hours = now.getUTCHours() + now.getUTCMinutes() / 60;
-      const sunLon = -(hours - 12) * 15;
-      const start = new Date(now.getFullYear(), 0, 0);
-      const diff = now.getTime() - start.getTime();
-      const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const sunLat = 23.5 * Math.sin(2 * Math.PI * (dayOfYear - 80) / 365);
-      const nightCircle = d3.geoCircle().center([sunLon + 180, -sunLat]).radius(90);
-
-      nightGroup.append("path")
-        .datum(nightCircle())
-        .attr("fill", "#272323ed")
-        .attr("fill-opacity", 0.4)
-        .attr("pointer-events", "none");
-    }
+    // 3. Night Cycle Setup (Static Path, updated in loop)
+    const nightPath = nightGroup.append("path")
+      .attr("fill", "#272323ed")
+      .attr("fill-opacity", 0.4)
+      .attr("pointer-events", "none");
 
 
     // --- Animation Loop ---
     const timer = d3.timer(() => {
-      // Logic: 
-      // 1. If dragging -> User controls rotation
-      // 2. If selectedStory -> Auto-rotate to target
-      // 3. If idle -> Apply momentum or auto-rotate slowly OR Gyroscope
+      const {
+        stories, showHeatmap, showDayNight, showConstellations, enableGyro,
+        hoveredCategory, selectedCategory, selectedStory, onStoryClick
+      } = propsRef.current;
 
+      const { x: gX, y: gY } = gyroRef.current;
+
+      // Logic: 
       if (isDraggingRef.current) {
         // Handled by drag behavior
       } else if (targetRotationRef.current) {
@@ -201,31 +209,23 @@ const Globe: React.FC<GlobeProps> = ({
         const [currentLon, currentLat] = rotationRef.current;
         const [targetLon, targetLat] = targetRotationRef.current;
 
-        // Simple easing
         const k = 0.05;
         let dLon = targetLon - currentLon;
         let dLat = targetLat - currentLat;
 
-        // Handle wrapping for longitude
         if (dLon > 180) dLon -= 360;
         if (dLon < -180) dLon += 360;
 
         rotationRef.current[0] += dLon * k;
         rotationRef.current[1] += dLat * k;
 
-        // Stop momentum
         velocityRef.current = [0, 0];
       } else {
-        // Gyroscope Influence (if enabled, available and not dragging)
-        // gyroX (gamma) -> Rotate Y (Longitude)
-        // gyroY (beta) -> Rotate X (Latitude)
-        // Sensitivity factor
+        // Gyroscope
         const gyroSensitivity = 0.05;
-
-        // Only apply if significant tilt to avoid drift
-        if (enableGyro && (Math.abs(gyroX) > 2 || Math.abs(gyroY) > 2)) {
-          rotationRef.current[0] += gyroX * gyroSensitivity;
-          rotationRef.current[1] += gyroY * gyroSensitivity;
+        if (enableGyro && (Math.abs(gX) > 2 || Math.abs(gY) > 2)) {
+          rotationRef.current[0] += gX * gyroSensitivity;
+          rotationRef.current[1] += gY * gyroSensitivity;
         }
 
         // Momentum
@@ -239,36 +239,47 @@ const Globe: React.FC<GlobeProps> = ({
         rotationRef.current[1] += velocityRef.current[1];
       }
 
-      // 2. Update Projection
+      // Update Projection
       projection.scale(scaleRef.current);
       projection.rotate([rotationRef.current[0], rotationRef.current[1], 0]);
 
-      // Update Water Circle Radius (in case of zoom)
+      // Update Water
       waterGroup.select("circle").attr("r", projection.scale());
 
-      // 3. Redraw Paths
+      // Redraw Paths
       landGroup.selectAll("path").attr("d", pathGenerator as any);
+
+      // Update Night
       if (showDayNight) {
-        nightGroup.selectAll("path").attr("d", pathGenerator as any);
+        const now = new Date();
+        const hours = now.getUTCHours() + now.getUTCMinutes() / 60;
+        const sunLon = -(hours - 12) * 15;
+        const start = new Date(now.getFullYear(), 0, 0);
+        const diff = now.getTime() - start.getTime();
+        const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const sunLat = 23.5 * Math.sin(2 * Math.PI * (dayOfYear - 80) / 365);
+        const nightCircle = d3.geoCircle().center([sunLon + 180, -sunLat]).radius(90);
+
+        nightPath.datum(nightCircle()).attr("d", pathGenerator as any).attr("display", null);
+      } else {
+        nightPath.attr("display", "none");
       }
 
-      // 4. Calculate Visible Dots
+      // Calculate Visible Dots
       const visibleDots = stories.map(story => {
         const projected = projection([story.lng, story.lat]);
         const isVisible = projected && d3.geoDistance([story.lng, story.lat], projection.invert!([width / 2, height / 2])!) < 1.57;
         return { ...story, projected, isVisible };
       }).filter(d => d.isVisible && d.projected);
 
-      // 5. Draw Constellations (Animated)
+      // Draw Constellations
       const activeCategory = hoveredCategory || selectedCategory;
-
-      // Reset animation time if category changes
       if (activeCategory !== activeCategoryRef.current) {
         activeCategoryRef.current = activeCategory;
         categoryHoverStartTimeRef.current = Date.now();
       }
 
-      constellationsGroup.selectAll("*").remove(); // Clear previous frame's paths
+      constellationsGroup.selectAll("*").remove();
 
       if (showConstellations && activeCategory && visibleDots.length > 0) {
         const categoryDots = visibleDots.filter(d => d.category === activeCategory);
@@ -288,10 +299,9 @@ const Globe: React.FC<GlobeProps> = ({
               .attr("stroke-opacity", 0.6)
               .style("pointer-events", "none");
 
-            // Animate stroke-dashoffset
             const totalLength = (path.node() as SVGPathElement).getTotalLength();
             const elapsed = Date.now() - categoryHoverStartTimeRef.current;
-            const duration = 1500; // 1.5s to draw
+            const duration = 1500;
             const progress = Math.min(1, elapsed / duration);
 
             path
@@ -301,12 +311,10 @@ const Globe: React.FC<GlobeProps> = ({
         }
       }
 
-      // 6. Particle Effects (Fireflies)
-      particlesGroup.selectAll("*").remove(); // Clear particles (we'll redraw them)
-
+      // Particles
+      particlesGroup.selectAll("*").remove();
       if (selectedStory) {
-        // Spawn new particles
-        if (Math.random() < 0.2) { // Spawn chance per frame
+        if (Math.random() < 0.2) {
           const storyDot = visibleDots.find(d => d.id === selectedStory.id);
           if (storyDot && storyDot.projected) {
             particlesRef.current.push({
@@ -320,30 +328,28 @@ const Globe: React.FC<GlobeProps> = ({
           }
         }
       }
-
-      // Update and Draw Particles
       particlesRef.current = particlesRef.current.filter(p => p.life > 0);
       particlesRef.current.forEach(p => {
         p.x += p.vx;
         p.y += p.vy;
-        p.life -= 0.02; // Fade out speed
+        p.life -= 0.02;
       });
-
       if (particlesRef.current.length > 0) {
         particlesGroup.selectAll("circle")
           .data(particlesRef.current)
           .enter().append("circle")
           .attr("cx", d => d.x)
           .attr("cy", d => d.y)
-          .attr("r", d => 2 * d.life) // Shrink as they die
+          .attr("r", d => 2 * d.life)
           .attr("fill", d => d.color)
           .attr("opacity", d => d.life)
           .style("pointer-events", "none");
       }
 
-      // 7. Draw Heatmap (if enabled)
+      // Heatmap
       heatmapGroup.selectAll("*").remove();
       if (showHeatmap && visibleDots.length > 0) {
+        // Throttle heatmap? For now, just render.
         const densityData = d3.contourDensity()
           .x((d: any) => d.projected![0])
           .y((d: any) => d.projected![1])
@@ -365,11 +371,7 @@ const Globe: React.FC<GlobeProps> = ({
           .style("pointer-events", "none");
       }
 
-      // 8. Draw Markers
-      // We use D3 data join for markers to avoid full remove/add if possible, 
-      // but for simplicity in this loop we'll clear and redraw or use a key function.
-      // Since 'visibleDots' changes every frame during rotation, we effectively redraw.
-
+      // Markers
       const markers = markersGroup.selectAll("g.marker")
         .data(visibleDots, (d: any) => d.id);
 
@@ -380,17 +382,16 @@ const Globe: React.FC<GlobeProps> = ({
         .on("click", (event, d) => {
           if (!isDraggingRef.current) {
             event.stopPropagation();
-            triggerImpact('light'); // Haptic feedback
-            onStoryClick(d);
+            triggerImpact('light');
+            // Use ref to get latest callback
+            propsRef.current.onStoryClick(d);
           }
         });
 
-      // Add circle elements to new markers
       if (!showHeatmap) {
         markersEnter.append("circle")
           .attr("r", 5)
           .attr("class", "pulse-circle pointer-events-none");
-
         markersEnter.append("circle")
           .attr("r", 3)
           .attr("class", "core-circle")
@@ -403,15 +404,13 @@ const Globe: React.FC<GlobeProps> = ({
           .attr("fill-opacity", 0.5);
       }
 
-      // Update positions of all markers
       const markersUpdate = markers.merge(markersEnter as any)
         .attr("transform", d => `translate(${d.projected![0]}, ${d.projected![1]})`);
 
-      // Update attributes (colors/pulse)
       if (!showHeatmap) {
         markersUpdate.select(".pulse-circle")
           .attr("fill", d => CATEGORY_COLORS[d.category])
-          .attr("r", d => (selectedStory?.id === d.id ? 15 : 5)) // Highlight selected
+          .attr("r", d => (selectedStory?.id === d.id ? 15 : 5))
           .attr("opacity", d => (selectedStory?.id === d.id ? 0.5 : 1))
           .attr("class", d => {
             const isSelected = selectedStory?.id === d.id;
@@ -422,27 +421,22 @@ const Globe: React.FC<GlobeProps> = ({
         markersUpdate.select(".core-circle")
           .attr("fill", d => CATEGORY_COLORS[d.category])
           .attr("r", d => (selectedStory?.id === d.id ? 6 : 3));
-      } else {
-        // Ensure correct styling if switching back and forth (simplified here, assuming full redraw on toggle)
       }
 
-      // 9. Draw Country Labels (New)
+      // Labels
       labelsGroup.selectAll("*").remove();
-      if (hoveredCountry) {
-        // Check visibility using geoDistance
-        const center = d3.geoCentroid(hoveredCountry);
+      if (hoveredCountryRef.current) {
+        const center = d3.geoCentroid(hoveredCountryRef.current);
         const dist = d3.geoDistance(center, projection.invert!([width / 2, height / 2])!);
 
-        if (dist < 1.57) { // Visible hemisphere
-          const centroid = pathGenerator.centroid(hoveredCountry);
-          if (centroid[0] && centroid[1]) { // Check for valid coordinates
+        if (dist < 1.57) {
+          const centroid = pathGenerator.centroid(hoveredCountryRef.current);
+          if (centroid[0] && centroid[1]) {
             const labelGroup = labelsGroup.append("g")
               .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`)
               .style("pointer-events", "none");
 
-            // Background pill
-            const text = hoveredCountry.properties.name;
-            // Approximate width based on char count (rough, but fast)
+            const text = hoveredCountryRef.current.properties.name;
             const approxWidth = text.length * 8 + 20;
 
             labelGroup.append("rect")
@@ -453,7 +447,7 @@ const Globe: React.FC<GlobeProps> = ({
               .attr("rx", 15)
               .attr("fill", "#0f172a")
               .attr("fill-opacity", 0.8)
-              .attr("stroke", "#38bdf8") // neon-blue
+              .attr("stroke", "#38bdf8")
               .attr("stroke-width", 1);
 
             labelGroup.append("text")
@@ -467,36 +461,26 @@ const Globe: React.FC<GlobeProps> = ({
           }
         }
       }
-
     });
 
     // Drag Behavior
-
-
     const drag = d3.drag()
       .on("start", (event) => {
-        // Don't set isDraggingRef immediately to allow clicks
         velocityRef.current = [0, 0];
         lastPosRef.current = [event.x, event.y];
         startPosRef.current = [event.x, event.y];
-        targetRotationRef.current = null; // Cancel auto-rotation on user interact
-        triggerImpact('light'); // Haptic feedback start
-
-        // Request Gyro permission on first interaction if needed
+        targetRotationRef.current = null;
+        triggerImpact('light');
         requestGyroPermission();
       })
       .on("drag", (event) => {
         if (!lastPosRef.current || !startPosRef.current) return;
-
         const dx = event.x - lastPosRef.current[0];
         const dy = event.y - lastPosRef.current[1];
-
-        // Calculate total distance moved from start
         const totalDx = event.x - startPosRef.current[0];
         const totalDy = event.y - startPosRef.current[1];
         const dist = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
 
-        // Threshold check for drag vs click (increased to 6px for mobile tolerance)
         if (!isDraggingRef.current && dist > 6) {
           isDraggingRef.current = true;
         }
@@ -505,17 +489,13 @@ const Globe: React.FC<GlobeProps> = ({
           const sensitivity = 0.25;
           rotationRef.current[0] += dx * sensitivity;
           rotationRef.current[1] -= dy * sensitivity;
-
-          // Track velocity
           velocityRef.current = [dx * sensitivity, -dy * sensitivity];
         }
-
         lastPosRef.current = [event.x, event.y];
       })
       .on("end", () => {
         lastPosRef.current = null;
         startPosRef.current = null;
-        // Small delay to ensure click handler sees the correct state if it was a drag
         setTimeout(() => { isDraggingRef.current = false; }, 50);
       });
 
@@ -526,13 +506,12 @@ const Globe: React.FC<GlobeProps> = ({
       svg.on(".drag", null);
     };
 
-  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory, gyroX, gyroY, requestGyroPermission, triggerImpact, hoveredCountry, showDayNight, showConstellations, enableGyro]); // Added dependencies
-
+  }, [worldData]); // Only re-run if worldData changes (basically once)
 
   // Zoom Handlers
   const handleZoom = useCallback((delta: number) => {
     scaleRef.current = Math.max(100, Math.min(2000, scaleRef.current + delta));
-    triggerImpact('light'); // Haptic feedback
+    triggerImpact('light');
   }, [triggerImpact]);
 
   return (
@@ -542,8 +521,6 @@ const Globe: React.FC<GlobeProps> = ({
         className="w-full h-full block touch-none cursor-move"
         style={{ touchAction: 'none' }}
       />
-
-
 
       {/* Zoom Controls */}
       <div className="absolute bottom-28 right-4 flex flex-col gap-2 z-20 pointer-events-auto">
