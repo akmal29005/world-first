@@ -6,7 +6,7 @@ import ShareableCard from './ShareableCard';
 interface StoryCardProps {
   story: Story | null;
   onClose: () => void;
-  onReact?: (storyId: string, reaction: string) => void;
+  onReact?: (storyId: string, reaction: string, action: 'add' | 'remove') => void;
 }
 
 const CATEGORY_COLORS: Record<Category, string> = {
@@ -89,13 +89,40 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
     }
   };
 
+  // Check for existing reaction on mount
+  useEffect(() => {
+    if (story) {
+      const savedReaction = localStorage.getItem(`reaction_${story.id}`);
+      if (savedReaction) {
+        setSelectedReaction(savedReaction);
+      } else {
+        setSelectedReaction(null);
+      }
+    }
+  }, [story]);
+
   // Reaction handler
   const handleReaction = (type: string) => {
-    if (selectedReaction) return; // Prevent multiple reactions
-    setSelectedReaction(type);
-    if (onReact) {
-      onReact(story.id, type);
+    if (!onReact) return;
+
+    // Case 1: Unreact (Toggle off)
+    if (selectedReaction === type) {
+      localStorage.removeItem(`reaction_${story.id}`);
+      setSelectedReaction(null);
+      onReact(story.id, type, 'remove');
+      return;
     }
+
+    // Case 2: Switch Reaction (Remove old, Add new)
+    if (selectedReaction) {
+      // Remove old
+      onReact(story.id, selectedReaction, 'remove');
+    }
+
+    // Case 3: New Reaction (or finishing switch)
+    localStorage.setItem(`reaction_${story.id}`, type);
+    setSelectedReaction(type);
+    onReact(story.id, type, 'add');
   };
 
   return (

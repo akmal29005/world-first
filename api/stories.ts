@@ -23,6 +23,9 @@ export default async function handler(
         city TEXT,
         state TEXT,
         country TEXT,
+        reaction_heart INTEGER DEFAULT 0,
+        reaction_metoo INTEGER DEFAULT 0,
+        reaction_hug INTEGER DEFAULT 0,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -46,6 +49,21 @@ export default async function handler(
       `;
 
             return response.status(201).json(rows[0]);
+        }
+
+        if (request.method === 'DELETE') {
+            const { id } = request.query;
+
+            if (!id) {
+                return response.status(400).json({ error: 'Missing story ID' });
+            }
+
+            // Optional: Check for Authorization header here if we wanted strict API security
+            // const authHeader = request.headers.authorization;
+            // if (authHeader !== process.env.ADMIN_SECRET) { ... }
+
+            await client.sql`DELETE FROM stories WHERE id = ${id as string}`;
+            return response.status(200).json({ message: 'Story deleted' });
         }
 
         return response.status(405).json({ error: 'Method not allowed' });

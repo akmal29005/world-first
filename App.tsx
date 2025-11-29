@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { HelmetProvider } from 'react-helmet-async';
 import Globe from './components/Globe';
 import StoryCard from './components/StoryCard';
 import StoryForm from './components/StoryForm';
@@ -12,6 +13,9 @@ import AmbientSound from './components/AmbientSound';
 import { useHaptics } from './hooks/useHaptics';
 import SettingsModal from './components/SettingsModal';
 import AboutModal from './components/AboutModal';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
+import SEO from './components/SEO';
 
 interface NewPinState {
   lat: number;
@@ -32,6 +36,11 @@ const App: React.FC = () => {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [hoveredCategory, setHoveredCategory] = useState<Category | null>(null);
 
+  // Admin State
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const titleClickRef = useRef<{ count: number; lastClick: number }>({ count: 0, lastClick: 0 });
+
   // Tour State
   const [isTourActive, setIsTourActive] = useState(false);
   const [tourStories, setTourStories] = useState<Story[]>([]);
@@ -49,6 +58,24 @@ const App: React.FC = () => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   const { triggerSuccess } = useHaptics();
+
+  // --- Admin Entry Logic ---
+  const handleTitleClick = () => {
+    const now = Date.now();
+    const { count, lastClick } = titleClickRef.current;
+
+    if (now - lastClick < 1000) {
+      const newCount = count + 1;
+      if (newCount === 10) {
+        setShowAdminLogin(true);
+        titleClickRef.current = { count: 0, lastClick: 0 };
+      } else {
+        titleClickRef.current = { count: newCount, lastClick: now };
+      }
+    } else {
+      titleClickRef.current = { count: 1, lastClick: now };
+    }
+  };
 
   // --- Journey Mode Logic ---
   const startTour = useCallback(() => {
@@ -69,6 +96,8 @@ const App: React.FC = () => {
     setTourStories([]);
     setTourIndex(0);
     if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+    // Reset URL when tour stops
+    window.history.pushState({}, '', '/');
   }, []);
 
   const toggleTour = useCallback(() => {
@@ -95,7 +124,7 @@ const App: React.FC = () => {
     };
   }, [isTourActive, tourIndex, tourStories, stopTour]);
 
-  // Initialize with DB data
+  // Initialize with DB data & Handle Deep Linking
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
@@ -120,119 +149,41 @@ const App: React.FC = () => {
       setStories([...dbStories]);
       setIsLoading(false);
 
-      /*
-      // Static Stories (Client-side fallback for testing)
-      const staticStories: Story[] = [
-        {
-          id: 'static-1',
-          category: Category.FIRST_OCEAN,
-          year: 2005,
-          text: "I thought it would be cold, but it felt like a warm bath. I never wanted to leave.",
-          lat: -33.8688,
-          lng: 151.2093,
-          city: "Sydney",
-          state: "NSW",
-          country: "Australia",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-2',
-          category: Category.FIRST_OCEAN,
-          year: 2010,
-          text: "The Pacific looked infinite from the cliffs of Big Sur.",
-          lat: 36.2704,
-          lng: -121.8081,
-          city: "Big Sur",
-          state: "California",
-          country: "USA",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-3',
-          category: Category.FIRST_OCEAN,
-          year: 2015,
-          text: "Dipping my toes in the Mediterranean, the water was crystal clear.",
-          lat: 41.3851,
-          lng: 2.1734,
-          city: "Barcelona",
-          state: "Catalonia",
-          country: "Spain",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-4',
-          category: Category.FIRST_HEARTBREAK,
-          year: 2008,
-          text: "Walking through Shibuya crossing, feeling completely alone in the crowd.",
-          lat: 35.6591,
-          lng: 139.7006,
-          city: "Tokyo",
-          state: "Tokyo",
-          country: "Japan",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-5',
-          category: Category.FIRST_HEARTBREAK,
-          year: 2012,
-          text: "Rain in London hides the tears well.",
-          lat: 51.5074,
-          lng: -0.1278,
-          city: "London",
-          state: "England",
-          country: "UK",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-6',
-          category: Category.FIRST_TRAVEL,
-          year: 2019,
-          text: "The lights of Times Square were overwhelming, but I felt alive.",
-          lat: 40.7580,
-          lng: -73.9855,
-          city: "New York",
-          state: "NY",
-          country: "USA",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-7',
-          category: Category.FIRST_LOVE,
-          year: 2014,
-          text: "We shared a gelato near the Colosseum. It was the sweetest moment.",
-          lat: 41.8902,
-          lng: 12.4922,
-          city: "Rome",
-          state: "Lazio",
-          country: "Italy",
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: 'static-8',
-          category: Category.FIRST_SNOW,
-          year: 2000,
-          text: "The silence of the snow falling in Hokkaido was magical.",
-          lat: 43.0618,
-          lng: 141.3545,
-          city: "Sapporo",
-          state: "Hokkaido",
-          country: "Japan",
-          createdAt: new Date().toISOString()
+      // 2. Check for Deep Link
+      const params = new URLSearchParams(window.location.search);
+      const storyId = params.get('story');
+      if (storyId) {
+        const linkedStory = dbStories.find(s => s.id === storyId);
+        if (linkedStory) {
+          setSelectedStory(linkedStory);
         }
-      ];
-      // Uncomment to use static stories:
-      // setStories([...staticStories]);
-      */
+      }
     };
     init();
   }, []);
+
+  // Update URL when selectedStory changes
+  useEffect(() => {
+    if (selectedStory) {
+      const newUrl = `/?story=${selectedStory.id}`;
+      if (window.location.search !== `?story=${selectedStory.id}`) {
+        window.history.pushState({ storyId: selectedStory.id }, '', newUrl);
+      }
+    } else if (!isTourActive) { // Don't clear URL during tour transitions if we want to keep state, but usually we want clean URL
+      // Only clear if we are not in a tour, or if we explicitly closed a story
+      if (window.location.search.includes('story=')) {
+        window.history.pushState({}, '', '/');
+      }
+    }
+  }, [selectedStory, isTourActive]);
+
 
   const handleStoryClick = useCallback((story: Story) => {
     if (isAddingMode) return;
     // If tour is active and user clicks manually, stop the tour
     if (isTourActive) stopTour();
     setSelectedStory(story);
-  }, [isAddingMode, isTourActive]);
+  }, [isAddingMode, isTourActive, stopTour]);
 
   const handleMapClick = useCallback((lat: number, lng: number, country?: string) => {
     if (isAddingMode) {
@@ -241,7 +192,7 @@ const App: React.FC = () => {
       if (isTourActive) stopTour();
       setSelectedStory(null);
     }
-  }, [isAddingMode, isTourActive]);
+  }, [isAddingMode, isTourActive, stopTour]);
 
   const handleSaveStory = async (newStoryData: Omit<Story, 'id'>) => {
     // Optimistic Update
@@ -338,14 +289,17 @@ const App: React.FC = () => {
   }, [isTourActive, stopTour, stories]);
 
   // Reaction handler
-  const handleReaction = useCallback(async (storyId: string, reaction: string) => {
+  const handleReaction = useCallback(async (storyId: string, reaction: string, action: 'add' | 'remove') => {
     // 1. Optimistic Update
     setStories(prev => prev.map(s => {
       if (s.id === storyId) {
         const key = `reaction_${reaction}` as keyof Story;
+        const currentCount = (s[key] as number || 0);
+        const newCount = action === 'add' ? currentCount + 1 : Math.max(0, currentCount - 1);
+
         return {
           ...s,
-          [key]: (s[key] as number || 0) + 1
+          [key]: newCount
         };
       }
       return s;
@@ -353,10 +307,15 @@ const App: React.FC = () => {
 
     if (selectedStory && selectedStory.id === storyId) {
       const key = `reaction_${reaction}` as keyof Story;
-      setSelectedStory(prev => prev ? ({
-        ...prev,
-        [key]: (prev[key] as number || 0) + 1
-      }) : null);
+      setSelectedStory(prev => {
+        if (!prev) return null;
+        const currentCount = (prev[key] as number || 0);
+        const newCount = action === 'add' ? currentCount + 1 : Math.max(0, currentCount - 1);
+        return {
+          ...prev,
+          [key]: newCount
+        };
+      });
     }
 
     // 2. API Call
@@ -364,9 +323,9 @@ const App: React.FC = () => {
       await fetch('/api/reactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyId, type: reaction }),
+        body: JSON.stringify({ storyId, type: reaction, action }),
       });
-      triggerSuccess();
+      if (action === 'add') triggerSuccess();
     } catch (e) {
       console.error("Failed to submit reaction", e);
     }
@@ -391,196 +350,221 @@ const App: React.FC = () => {
   const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent || isTimeTravelOpen || showHeatmap;
 
   return (
-    <div className="relative w-screen h-screen bg-space text-white overflow-hidden font-sans selection:bg-neon-blue selection:text-white">
+    <HelmetProvider>
+      <div className="relative w-screen h-screen bg-space text-white overflow-hidden font-sans selection:bg-neon-blue selection:text-white">
 
-      {/* Background Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/20 via-slate-900/50 to-space pointer-events-none" />
-
-      {/* Tutorial Overlay */}
-      <TutorialOverlay />
-
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 p-8 flex justify-between items-start pointer-events-none z-30">
-        <div>
-          <h1 className="text-3xl md:text-5xl font-serif font-bold tracking-tight text-white drop-shadow-lg">
-            The Map of Firsts
-          </h1>
-          <p className="text-gray-400 mt-2 max-w-md text-sm md:text-base hidden md:block backdrop-blur-sm">
-            A geography of emotion. Click a light to read a story, or add your own to the collective memory.
-          </p>
-        </div>
-
-        <div className="hidden md:flex items-center gap-4 pointer-events-auto">
-          {/* Tour Status Indicator */}
-          {isTourActive && (
-            <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
-              <span className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
-              <span className="text-purple-200 font-medium tracking-wide text-sm">
-                Journey Mode • {tourIndex + 1}/{tourStories.length}
-              </span>
-              <button
-                onClick={stopTour}
-                className="ml-2 text-white/50 hover:text-white pointer-events-auto"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* GitHub Button */}
-          <a
-            href="https://github.com/akmal29005/world-first"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
-            aria-label="GitHub Repository"
-          >
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-            </svg>
-          </a>
-
-          {/* Info Button */}
-          <button
-            onClick={() => setIsAboutOpen(true)}
-            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
-            aria-label="About"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
-
-          {/* Settings Button */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
-            aria-label="Settings"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={{ showDayNight, showHeatmap, showConstellations, enableGyro }}
-        onToggle={handleSettingToggle}
-      />
-
-      {/* About Modal */}
-      <AboutModal
-        isOpen={isAboutOpen}
-        onClose={() => setIsAboutOpen(false)}
-      />
-
-      {/* Discovery Panel */}
-      <DiscoveryPanel
-        onToggleTour={toggleTour}
-        isTourActive={isTourActive}
-      />
-
-      {/* Time Slider (Only show if NOT in "Recent" mode, NOT adding, and Time Travel is OPEN) */}
-      {isTimeTravelOpen && !showRecent && !isAddingMode && !isLoading && (
-        <TimeSlider
-          minYear={1950}
-          maxYear={new Date().getFullYear()}
-          startYear={yearRange[0]}
-          endYear={yearRange[1]}
-          onChange={(start, end) => setYearRange([start, end])}
+        <SEO
+          title={selectedStory ? selectedStory.text.substring(0, 50) + (selectedStory.text.length > 50 ? '...' : '') : undefined}
+          description={selectedStory ? selectedStory.text : undefined}
         />
-      )}
 
-      {/* Instruction Toast for Adding Mode */}
-      {isAddingMode && !newPinLocation && (
-        <div className="absolute top-28 left-1/2 transform -translate-x-1/2 pointer-events-none z-50 w-full flex justify-center px-4">
-          <div className="bg-slate-900/90 text-neon-blue px-6 py-3 rounded-full backdrop-blur-md border border-neon-blue/30 shadow-[0_0_15px_rgba(14,165,233,0.3)] animate-[bounce_2s_infinite]">
-            <span className="font-bold uppercase tracking-wider text-sm flex items-center gap-2">
-              <span className="w-2 h-2 bg-neon-blue rounded-full animate-pulse"></span>
-              Tap country to drop pin
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <div className="absolute inset-0 z-10">
-        {isLoading ? (
-          <GlobeLoader />
-        ) : visibleStories.length === 0 ? (
-          <EmptyState
-            hasFilters={hasActiveFilters}
-            onReset={handleResetFilters}
-            onAddStory={handleAddModeToggle}
-          />
-        ) : (
-          <Globe
-            stories={visibleStories}
-            onStoryClick={handleStoryClick}
-            onMapClick={handleMapClick}
-            isAddingMode={isAddingMode}
-            showHeatmap={showHeatmap}
-            showDayNight={showDayNight}
-            showConstellations={showConstellations}
-            enableGyro={enableGyro}
-            hoveredCategory={hoveredCategory}
-            selectedCategory={filter === 'ALL' ? null : filter}
-            selectedStory={selectedStory}
+        {/* Admin Components */}
+        {showAdminLogin && (
+          <AdminLogin
+            onLogin={() => {
+              setIsAdminMode(true);
+              setShowAdminLogin(false);
+            }}
+            onClose={() => setShowAdminLogin(false)}
           />
         )}
-      </div>
 
-      {/* Overlays */}
-      <FilterBar
-        selected={filter}
-        onSelect={setFilter}
-        onAddClick={handleAddModeToggle}
-        isAddingMode={isAddingMode}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onRandomStory={handleRandomStory}
-        isTimeTravelOpen={isTimeTravelOpen}
-        onToggleTimeTravel={() => {
-          setIsTimeTravelOpen(!isTimeTravelOpen);
-          if (!isTimeTravelOpen) setShowRecent(false); // Close recent if opening time travel
-        }}
-        showHeatmap={showHeatmap}
-        onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
-        onHover={setHoveredCategory}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenAbout={() => setIsAboutOpen(true)}
-      />
+        {isAdminMode && (
+          <AdminDashboard onClose={() => setIsAdminMode(false)} />
+        )}
 
-      {selectedStory && (
-        <StoryCard
-          story={selectedStory}
-          onClose={() => {
-            setSelectedStory(null);
-            if (isTourActive) stopTour();
+        {/* Background Gradient */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/20 via-slate-900/50 to-space pointer-events-none" />
+
+        {/* Tutorial Overlay */}
+        <TutorialOverlay />
+
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 p-8 flex justify-between items-start pointer-events-none z-30">
+          <div className="pointer-events-auto">
+            <h1
+              onClick={handleTitleClick}
+              className="text-3xl md:text-5xl font-serif font-bold tracking-tight text-white drop-shadow-lg cursor-pointer select-none"
+            >
+              The Map of Firsts
+            </h1>
+            <p className="text-gray-400 mt-2 max-w-md text-sm md:text-base hidden md:block backdrop-blur-sm">
+              A geography of emotion. Click a light to read a story, or add your own to the collective memory.
+            </p>
+          </div>
+
+          <div className="hidden md:flex items-center gap-4 pointer-events-auto">
+            {/* Tour Status Indicator */}
+            {isTourActive && (
+              <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
+                <span className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
+                <span className="text-purple-200 font-medium tracking-wide text-sm">
+                  Journey Mode • {tourIndex + 1}/{tourStories.length}
+                </span>
+                <button
+                  onClick={stopTour}
+                  className="ml-2 text-white/50 hover:text-white pointer-events-auto"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* GitHub Button */}
+            <a
+              href="https://github.com/akmal29005/world-first"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              aria-label="GitHub Repository"
+            >
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+              </svg>
+            </a>
+
+            {/* Info Button */}
+            <button
+              onClick={() => setIsAboutOpen(true)}
+              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              aria-label="About"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+
+            {/* Settings Button */}
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              aria-label="Settings"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          settings={{ showDayNight, showHeatmap, showConstellations, enableGyro }}
+          onToggle={handleSettingToggle}
+        />
+
+        {/* About Modal */}
+        <AboutModal
+          isOpen={isAboutOpen}
+          onClose={() => setIsAboutOpen(false)}
+        />
+
+        {/* Discovery Panel */}
+        <DiscoveryPanel
+          onToggleTour={toggleTour}
+          isTourActive={isTourActive}
+        />
+
+        {/* Time Slider (Only show if NOT in "Recent" mode, NOT adding, and Time Travel is OPEN) */}
+        {isTimeTravelOpen && !showRecent && !isAddingMode && !isLoading && (
+          <TimeSlider
+            minYear={1950}
+            maxYear={new Date().getFullYear()}
+            startYear={yearRange[0]}
+            endYear={yearRange[1]}
+            onChange={(start, end) => setYearRange([start, end])}
+          />
+        )}
+
+        {/* Instruction Toast for Adding Mode */}
+        {isAddingMode && !newPinLocation && (
+          <div className="absolute top-28 left-1/2 transform -translate-x-1/2 pointer-events-none z-50 w-full flex justify-center px-4">
+            <div className="bg-slate-900/90 text-neon-blue px-6 py-3 rounded-full backdrop-blur-md border border-neon-blue/30 shadow-[0_0_15px_rgba(14,165,233,0.3)] animate-[bounce_2s_infinite]">
+              <span className="font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+                <span className="w-2 h-2 bg-neon-blue rounded-full animate-pulse"></span>
+                Tap country to drop pin
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div className="absolute inset-0 z-10">
+          {isLoading ? (
+            <GlobeLoader />
+          ) : visibleStories.length === 0 ? (
+            <EmptyState
+              hasFilters={hasActiveFilters}
+              onReset={handleResetFilters}
+              onAddStory={handleAddModeToggle}
+            />
+          ) : (
+            <Globe
+              stories={visibleStories}
+              onStoryClick={handleStoryClick}
+              onMapClick={handleMapClick}
+              isAddingMode={isAddingMode}
+              showHeatmap={showHeatmap}
+              showDayNight={showDayNight}
+              showConstellations={showConstellations}
+              enableGyro={enableGyro}
+              hoveredCategory={hoveredCategory}
+              selectedCategory={filter === 'ALL' ? null : filter}
+              selectedStory={selectedStory}
+            />
+          )}
+        </div>
+
+        {/* Overlays */}
+        <FilterBar
+          selected={filter}
+          onSelect={setFilter}
+          onAddClick={handleAddModeToggle}
+          isAddingMode={isAddingMode}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onRandomStory={handleRandomStory}
+          isTimeTravelOpen={isTimeTravelOpen}
+          onToggleTimeTravel={() => {
+            setIsTimeTravelOpen(!isTimeTravelOpen);
+            if (!isTimeTravelOpen) setShowRecent(false); // Close recent if opening time travel
           }}
-          onReact={handleReaction}
+          showHeatmap={showHeatmap}
+          onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+          onHover={setHoveredCategory}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenAbout={() => setIsAboutOpen(true)}
         />
-      )}
 
-      {newPinLocation && (
-        <StoryForm
-          lat={newPinLocation.lat}
-          lng={newPinLocation.lng}
-          initialCountry={newPinLocation.country}
-          onSave={handleSaveStory}
-          onCancel={() => setNewPinLocation(null)}
-        />
-      )}
+        {selectedStory && (
+          <StoryCard
+            story={selectedStory}
+            onClose={() => {
+              setSelectedStory(null);
+              if (isTourActive) stopTour();
+            }}
+            onReact={handleReaction}
+          />
+        )}
 
-      {/* Ambient Sound Controller */}
-      <AmbientSound />
+        {newPinLocation && (
+          <StoryForm
+            lat={newPinLocation.lat}
+            lng={newPinLocation.lng}
+            initialCountry={newPinLocation.country}
+            onSave={handleSaveStory}
+            onCancel={() => setNewPinLocation(null)}
+          />
+        )}
 
-    </div>
+        {/* Ambient Sound Controller */}
+        <AmbientSound />
+
+      </div>
+    </HelmetProvider>
   );
 };
 

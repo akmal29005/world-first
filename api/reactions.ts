@@ -9,20 +9,22 @@ export default async function handler(
         return response.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { storyId, type } = request.body;
+    const { storyId, type, action = 'add' } = request.body;
 
-    if (!storyId || !['heart', 'metoo', 'hug'].includes(type)) {
+    if (!storyId || !['heart', 'metoo', 'hug'].includes(type) || !['add', 'remove'].includes(action)) {
         return response.status(400).json({ error: 'Invalid parameters' });
     }
 
     const client = await db.connect();
 
     try {
-        // Increment the specific reaction count
-        // Note: We use dynamic column name but validate 'type' strictly above to prevent SQL injection
+        // Increment or decrement based on action
+        const operator = action === 'add' ? '+' : '-';
+
+        // Use GREATEST to ensure count doesn't go below 0
         const query = `
       UPDATE stories 
-      SET reaction_${type} = COALESCE(reaction_${type}, 0) + 1 
+      SET reaction_${type} = GREATEST(COALESCE(reaction_${type}, 0) ${operator} 1, 0)
       WHERE id = $1 
       RETURNING *;
     `;

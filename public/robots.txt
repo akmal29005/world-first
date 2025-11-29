@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://the-map-of-firsts.vercel.app/sitemap.xml
