@@ -37,7 +37,7 @@ const DiscoveryPanel: React.FC<DiscoveryPanelProps> = ({ onToggleTour, isTourAct
     }, [timeoutId]);
 
     return (
-        <div className="absolute bottom-32 md:bottom-24 left-8 z-40 flex flex-col items-start gap-4 pointer-events-none">
+        <div className="absolute bottom-40 md:bottom-32 left-8 z-40 flex flex-col items-start gap-4 pointer-events-none">
             <button
                 onClick={handleClick}
                 onMouseEnter={handleMouseEnter}

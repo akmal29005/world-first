@@ -44,6 +44,9 @@ export interface Story {
   state?: string;
   country?: string;
   reactionCount?: number;
+  reaction_heart?: number;
+  reaction_metoo?: number;
+  reaction_hug?: number;
   views?: number;
   createdAt?: string;
 }

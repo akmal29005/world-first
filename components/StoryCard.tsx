@@ -20,7 +20,11 @@ const CATEGORY_COLORS: Record<Category, string> = {
   [Category.OTHER]: 'text-gray-400 border-gray-400',
 };
 
-const REACTIONS = ['❤️', '🥺', '😊', '🔥'];
+const REACTIONS = [
+  { emoji: '❤️', type: 'heart', label: 'Love' },
+  { emoji: '🥺', type: 'metoo', label: 'Me Too' },
+  { emoji: '🫂', type: 'hug', label: 'Hug' },
+];
 
 const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
   const [dragY, setDragY] = useState(0);
@@ -86,10 +90,11 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
   };
 
   // Reaction handler
-  const handleReaction = (reaction: string) => {
-    setSelectedReaction(reaction);
+  const handleReaction = (type: string) => {
+    if (selectedReaction) return; // Prevent multiple reactions
+    setSelectedReaction(type);
     if (onReact) {
-      onReact(story.id, reaction);
+      onReact(story.id, type);
     }
   };
 
@@ -142,18 +147,24 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
 
           {/* Reactions */}
           <div className="flex items-center justify-between border-t border-white/10 pt-4">
-            <div className="flex gap-2">
-              {REACTIONS.map((reaction) => (
-                <button
-                  key={reaction}
-                  onClick={() => handleReaction(reaction)}
-                  className={`text-2xl hover:scale-125 transition-transform ${selectedReaction === reaction ? 'scale-125' : ''
-                    }`}
-                  title={`React with ${reaction}`}
-                >
-                  {reaction}
-                </button>
-              ))}
+            <div className="flex gap-4">
+              {REACTIONS.map(({ emoji, type, label }) => {
+                // Get count from story object dynamically
+                const count = (story as any)[`reaction_${type}`] || 0;
+
+                return (
+                  <button
+                    key={type}
+                    onClick={() => handleReaction(type)}
+                    className={`flex flex-col items-center gap-1 transition-all active:scale-90 ${selectedReaction === type ? 'scale-125 text-white' : 'text-gray-400 hover:text-white hover:scale-110'
+                      }`}
+                    title={label}
+                  >
+                    <span className="text-2xl">{emoji}</span>
+                    <span className="text-[10px] font-bold">{count}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex gap-2">
@@ -193,13 +204,6 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
               </button>
             </div>
           </div>
-
-          {/* Reaction count display */}
-          {story.reactionCount && story.reactionCount > 0 && (
-            <div className="text-xs text-gray-500 mt-2 text-center">
-              {story.reactionCount} {story.reactionCount === 1 ? 'reaction' : 'reactions'}
-            </div>
-          )}
         </div>
       </div>
     </>

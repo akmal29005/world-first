@@ -10,6 +10,8 @@ import { Story, Category } from './types';
 import TimeSlider from './components/TimeSlider';
 import AmbientSound from './components/AmbientSound';
 import { useHaptics } from './hooks/useHaptics';
+import SettingsModal from './components/SettingsModal';
+import AboutModal from './components/AboutModal';
 
 interface NewPinState {
   lat: number;
@@ -39,7 +41,58 @@ const App: React.FC = () => {
   // Time Travel State
   const [yearRange, setYearRange] = useState<[number, number]>([1950, new Date().getFullYear()]);
 
+  // Visual Settings State
+  const [showDayNight, setShowDayNight] = useState(true);
+  const [showConstellations, setShowConstellations] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+
   const { triggerSuccess } = useHaptics();
+
+  // --- Journey Mode Logic ---
+  const startTour = useCallback(() => {
+    if (stories.length === 0) return;
+    const categories = Object.values(Category);
+    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+    let tourSet = stories.filter(s => s.category === randomCategory);
+    if (tourSet.length < 3) tourSet = stories;
+    const shuffled = [...tourSet].sort(() => 0.5 - Math.random()).slice(0, 5);
+    setTourStories(shuffled);
+    setTourIndex(0);
+    setIsTourActive(true);
+    setSelectedStory(shuffled[0]);
+  }, [stories]);
+
+  const stopTour = useCallback(() => {
+    setIsTourActive(false);
+    setTourStories([]);
+    setTourIndex(0);
+    if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+  }, []);
+
+  const toggleTour = useCallback(() => {
+    if (isTourActive) {
+      stopTour();
+    } else {
+      startTour();
+    }
+  }, [isTourActive, startTour, stopTour]);
+
+  useEffect(() => {
+    if (!isTourActive || tourStories.length === 0) return;
+    tourTimerRef.current = window.setTimeout(() => {
+      const nextIndex = tourIndex + 1;
+      if (nextIndex < tourStories.length) {
+        setTourIndex(nextIndex);
+        setSelectedStory(tourStories[nextIndex]);
+      } else {
+        stopTour();
+      }
+    }, 10000);
+    return () => {
+      if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+    };
+  }, [isTourActive, tourIndex, tourStories, stopTour]);
 
   // Initialize with DB data and Static stories
   useEffect(() => {
@@ -64,6 +117,7 @@ const App: React.FC = () => {
       }
 
       // 2. Static Stories (Client-side fallback)
+      /*
       const staticStories: Story[] = [
         {
           id: 'static-1',
@@ -138,9 +192,10 @@ const App: React.FC = () => {
           createdAt: new Date().toISOString()
         }
       ];
+      */
 
       // Combine database and static stories
-      setStories([...dbStories, ...staticStories]);
+      setStories([...dbStories]);
       setIsLoading(false);
     };
     init();
@@ -245,17 +300,45 @@ const App: React.FC = () => {
   // Random story handler
   const handleRandomStory = useCallback(() => {
     if (isTourActive) stopTour();
-    if (visibleStories.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * visibleStories.length);
-    setSelectedStory(visibleStories[randomIndex]);
-  }, [visibleStories, isTourActive]);
+    setShowRecent(false);
+    setIsTimeTravelOpen(false);
+    setShowHeatmap(false);
+  }, [isTourActive, stopTour]);
 
   // Reaction handler
-  const handleReaction = useCallback((storyId: string, reaction: string) => {
-    console.log(`Story ${storyId} received reaction: ${reaction}`);
-    // TODO: Send to API endpoint when implemented
-    // For now, just log it
-  }, []);
+  const handleReaction = useCallback(async (storyId: string, reaction: string) => {
+    // 1. Optimistic Update
+    setStories(prev => prev.map(s => {
+      if (s.id === storyId) {
+        const key = `reaction_${reaction}` as keyof Story;
+        return {
+          ...s,
+          [key]: (s[key] as number || 0) + 1
+        };
+      }
+      return s;
+    }));
+
+    if (selectedStory && selectedStory.id === storyId) {
+      const key = `reaction_${reaction}` as keyof Story;
+      setSelectedStory(prev => prev ? ({
+        ...prev,
+        [key]: (prev[key] as number || 0) + 1
+      }) : null);
+    }
+
+    // 2. API Call
+    try {
+      await fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId, type: reaction }),
+      });
+      triggerSuccess();
+    } catch (e) {
+      console.error("Failed to submit reaction", e);
+    }
+  }, [selectedStory, triggerSuccess]);
 
   // Reset filters
   const handleResetFilters = useCallback(() => {
@@ -266,66 +349,11 @@ const App: React.FC = () => {
     setShowHeatmap(false);
   }, []);
 
-  // --- Journey Mode Logic ---
-
-  const startTour = useCallback(() => {
-    if (stories.length === 0) return;
-
-    // Pick a random category to tour, or just random stories if mixed
-    const categories = Object.values(Category);
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-
-    // Filter stories by this category (or use all if few)
-    let tourSet = stories.filter(s => s.category === randomCategory);
-    if (tourSet.length < 3) tourSet = stories; // Fallback to all if not enough
-
-    // Shuffle and pick 5
-    const shuffled = [...tourSet].sort(() => 0.5 - Math.random()).slice(0, 5);
-
-    setTourStories(shuffled);
-    setTourIndex(0);
-    setIsTourActive(true);
-    setSelectedStory(shuffled[0]);
-
-    // Set filter to match tour for visual consistency (optional)
-    // setFilter(randomCategory); 
-  }, [stories]);
-
-  const stopTour = useCallback(() => {
-    setIsTourActive(false);
-    setTourStories([]);
-    setTourIndex(0);
-    if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
-  }, []);
-
-  const toggleTour = useCallback(() => {
-    if (isTourActive) {
-      stopTour();
-    } else {
-      startTour();
-    }
-  }, [isTourActive, startTour, stopTour]);
-
-  // Tour Loop
-  useEffect(() => {
-    if (!isTourActive || tourStories.length === 0) return;
-
-    // Schedule next story
-    tourTimerRef.current = window.setTimeout(() => {
-      const nextIndex = tourIndex + 1;
-      if (nextIndex < tourStories.length) {
-        setTourIndex(nextIndex);
-        setSelectedStory(tourStories[nextIndex]);
-      } else {
-        stopTour(); // End of tour
-      }
-    }, 10000); // 10 seconds per story
-
-    return () => {
-      if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
-    };
-  }, [isTourActive, tourIndex, tourStories, stopTour]);
-
+  const handleSettingToggle = (setting: 'showDayNight' | 'showHeatmap' | 'showConstellations') => {
+    if (setting === 'showDayNight') setShowDayNight(!showDayNight);
+    if (setting === 'showHeatmap') setShowHeatmap(!showHeatmap);
+    if (setting === 'showConstellations') setShowConstellations(!showConstellations);
+  };
 
   const hasActiveFilters = filter !== 'ALL' || searchQuery.trim() !== '' || showRecent || isTimeTravelOpen || showHeatmap;
 
@@ -349,22 +377,74 @@ const App: React.FC = () => {
           </p>
         </div>
 
-        {/* Tour Status Indicator */}
-        {isTourActive && (
-          <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
-            <span className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
-            <span className="text-purple-200 font-medium tracking-wide text-sm">
-              Journey Mode • {tourIndex + 1}/{tourStories.length}
-            </span>
-            <button
-              onClick={stopTour}
-              className="ml-2 text-white/50 hover:text-white pointer-events-auto"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+        <div className="hidden md:flex items-center gap-4 pointer-events-auto">
+          {/* Tour Status Indicator */}
+          {isTourActive && (
+            <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
+              <span className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
+              <span className="text-purple-200 font-medium tracking-wide text-sm">
+                Journey Mode • {tourIndex + 1}/{tourStories.length}
+              </span>
+              <button
+                onClick={stopTour}
+                className="ml-2 text-white/50 hover:text-white pointer-events-auto"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* GitHub Button */}
+          <a
+            href="https://github.com/akmal29005/world-first"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+            aria-label="GitHub Repository"
+          >
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+            </svg>
+          </a>
+
+          {/* Info Button */}
+          <button
+            onClick={() => setIsAboutOpen(true)}
+            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+            aria-label="About"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
+          {/* Settings Button */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+            aria-label="Settings"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={{ showDayNight, showHeatmap, showConstellations }}
+        onToggle={handleSettingToggle}
+      />
+
+      {/* About Modal */}
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+      />
 
       {/* Discovery Panel */}
       <DiscoveryPanel
@@ -412,6 +492,8 @@ const App: React.FC = () => {
             onMapClick={handleMapClick}
             isAddingMode={isAddingMode}
             showHeatmap={showHeatmap}
+            showDayNight={showDayNight}
+            showConstellations={showConstellations}
             hoveredCategory={hoveredCategory}
             selectedCategory={filter === 'ALL' ? null : filter}
             selectedStory={selectedStory}
@@ -436,6 +518,8 @@ const App: React.FC = () => {
         showHeatmap={showHeatmap}
         onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
         onHover={setHoveredCategory}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
       />
 
       {selectedStory && (
