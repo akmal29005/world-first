@@ -7,8 +7,9 @@ interface SettingsModalProps {
         showDayNight: boolean;
         showHeatmap: boolean;
         showConstellations: boolean;
+        enableGyro: boolean;
     };
-    onToggle: (setting: 'showDayNight' | 'showHeatmap' | 'showConstellations') => void;
+    onToggle: (setting: 'showDayNight' | 'showHeatmap' | 'showConstellations' | 'enableGyro') => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onToggle }) => {
@@ -97,6 +98,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
                         <Toggle
                             enabled={settings.showConstellations}
                             onChange={() => onToggle('showConstellations')}
+                        />
+                    </div>
+
+                    {/* Gyroscope Toggle (Experimental) */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div className="font-medium text-white">Gyroscope Control <span className="text-xs text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded ml-1 border border-emerald-500/20">Experimental</span></div>
+                                <div className="text-xs text-gray-400">Tilt device to rotate globe</div>
+                            </div>
+                        </div>
+                        <Toggle
+                            enabled={settings.enableGyro}
+                            onChange={() => onToggle('enableGyro')}
                         />
                     </div>
 

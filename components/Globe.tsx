@@ -14,6 +14,7 @@ interface GlobeProps {
   showHeatmap?: boolean;
   showDayNight?: boolean;
   showConstellations?: boolean;
+  enableGyro?: boolean;
   hoveredCategory: Category | null;
   selectedCategory: Category | null;
   selectedStory: Story | null;
@@ -27,6 +28,7 @@ const Globe: React.FC<GlobeProps> = ({
   showHeatmap = false,
   showDayNight = true,
   showConstellations = true,
+  enableGyro = false,
   hoveredCategory,
   selectedCategory,
   selectedStory
@@ -214,14 +216,14 @@ const Globe: React.FC<GlobeProps> = ({
         // Stop momentum
         velocityRef.current = [0, 0];
       } else {
-        // Gyroscope Influence (if available and not dragging)
+        // Gyroscope Influence (if enabled, available and not dragging)
         // gyroX (gamma) -> Rotate Y (Longitude)
         // gyroY (beta) -> Rotate X (Latitude)
         // Sensitivity factor
         const gyroSensitivity = 0.05;
 
         // Only apply if significant tilt to avoid drift
-        if (Math.abs(gyroX) > 2 || Math.abs(gyroY) > 2) {
+        if (enableGyro && (Math.abs(gyroX) > 2 || Math.abs(gyroY) > 2)) {
           rotationRef.current[0] += gyroX * gyroSensitivity;
           rotationRef.current[1] += gyroY * gyroSensitivity;
         }
@@ -524,7 +526,7 @@ const Globe: React.FC<GlobeProps> = ({
       svg.on(".drag", null);
     };
 
-  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory, gyroX, gyroY, requestGyroPermission, triggerImpact, hoveredCountry, showDayNight, showConstellations]); // Added dependencies
+  }, [worldData, stories, isAddingMode, showHeatmap, onStoryClick, onMapClick, hoveredCategory, selectedCategory, selectedStory, gyroX, gyroY, requestGyroPermission, triggerImpact, hoveredCountry, showDayNight, showConstellations, enableGyro]); // Added dependencies
 
 
   // Zoom Handlers
