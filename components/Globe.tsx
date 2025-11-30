@@ -281,15 +281,18 @@ const Globe: React.FC<GlobeProps> = (props) => {
 
       constellationsGroup.selectAll("*").remove();
 
-      if (showConstellations && activeCategory && visibleDots.length > 0) {
-        const categoryDots = visibleDots.filter(d => d.category === activeCategory);
+      if (showConstellations && activeCategory) {
+        const categoryDots = stories.filter(d => d.category === activeCategory);
         if (categoryDots.length > 1) {
-          const lineGenerator = d3.line()
-            .x((d: any) => d.projected![0])
-            .y((d: any) => d.projected![1])
-            .curve(d3.curveLinear);
+          // Create a GeoJSON LineString from the coordinates
+          const lineString = {
+            type: "LineString",
+            coordinates: categoryDots.map(d => [d.lng, d.lat])
+          };
 
-          const pathData = lineGenerator(categoryDots as any);
+          // Use the existing pathGenerator (d3.geoPath) to render the geodesic line
+          const pathData = pathGenerator(lineString as any);
+
           if (pathData) {
             const path = constellationsGroup.append("path")
               .attr("d", pathData)

@@ -17,6 +17,7 @@ import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import SEO from './components/SEO';
 import ShameScreen from './components/ShameScreen';
+import PassportModal from './components/PassportModal';
 
 interface NewPinState {
   lat: number;
@@ -59,6 +60,7 @@ const App: React.FC = () => {
   const [enableGyro, setEnableGyro] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isPassportOpen, setIsPassportOpen] = useState(false);
 
   const { triggerSuccess } = useHaptics();
 
@@ -405,7 +407,7 @@ const App: React.FC = () => {
 
         {/* Header */}
         <div className="absolute top-0 left-0 right-0 p-8 flex justify-between items-start pointer-events-none z-30">
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto max-w-[70%] md:max-w-none">
             <h1
               onClick={handleTitleClick}
               className="text-3xl md:text-5xl font-serif font-bold tracking-tight text-white drop-shadow-lg cursor-pointer select-none"
@@ -417,7 +419,7 @@ const App: React.FC = () => {
             </p>
           </div>
 
-          <div className="hidden md:flex items-center gap-4 pointer-events-auto">
+          <div className="flex items-center gap-4 pointer-events-auto">
             {/* Tour Status Indicator */}
             {isTourActive && (
               <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/50 px-4 py-2 rounded-full flex items-center gap-3 animate-pulse">
@@ -439,7 +441,7 @@ const App: React.FC = () => {
               href="https://github.com/akmal29005/world-first"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              className="hidden lg:flex w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
               aria-label="GitHub Repository"
             >
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -450,7 +452,7 @@ const App: React.FC = () => {
             {/* Info Button */}
             <button
               onClick={() => setIsAboutOpen(true)}
-              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              className="hidden lg:flex w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
               aria-label="About"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -461,12 +463,23 @@ const App: React.FC = () => {
             {/* Settings Button */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              className="hidden lg:flex w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
               aria-label="Settings"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+
+            {/* Passport Button */}
+            <button
+              onClick={() => setIsPassportOpen(true)}
+              className="hidden lg:flex w-10 h-10 rounded-full bg-slate-900/50 backdrop-blur-md border border-white/10 items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg"
+              aria-label="Passport"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
             </button>
           </div>
@@ -478,6 +491,12 @@ const App: React.FC = () => {
           onClose={() => setIsSettingsOpen(false)}
           settings={{ showDayNight, showHeatmap, showConstellations, enableGyro }}
           onToggle={handleSettingToggle}
+        />
+
+        {/* Passport Modal */}
+        <PassportModal
+          isOpen={isPassportOpen}
+          onClose={() => setIsPassportOpen(false)}
         />
 
         {/* About Modal */}
@@ -492,7 +511,7 @@ const App: React.FC = () => {
           isTourActive={isTourActive}
         />
 
-        {/* Time Slider (Only show if NOT in "Recent" mode, NOT adding, and Time Travel is OPEN) */}
+        {/* Time Slider */}
         {isTimeTravelOpen && !showRecent && !isAddingMode && !isLoading && (
           <TimeSlider
             minYear={1950}
@@ -561,6 +580,7 @@ const App: React.FC = () => {
           onHover={setHoveredCategory}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenAbout={() => setIsAboutOpen(true)}
+          onOpenPassport={() => setIsPassportOpen(true)}
         />
 
         {selectedStory && (

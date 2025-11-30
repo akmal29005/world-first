@@ -90,13 +90,25 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClose, onReact }) => {
   };
 
   // Check for existing reaction on mount
+  // Check for existing reaction on mount AND stamp passport
   useEffect(() => {
     if (story) {
+      // 1. Load Reaction
       const savedReaction = localStorage.getItem(`reaction_${story.id}`);
       if (savedReaction) {
         setSelectedReaction(savedReaction);
       } else {
         setSelectedReaction(null);
+      }
+
+      // 2. Stamp Passport (if country exists)
+      if (story.country) {
+        const visited = JSON.parse(localStorage.getItem('visited_countries') || '[]');
+        if (!visited.includes(story.country)) {
+          visited.push(story.country);
+          localStorage.setItem('visited_countries', JSON.stringify(visited));
+          // Optional: Trigger a "Stamp" sound or toast here?
+        }
       }
     }
   }, [story]);

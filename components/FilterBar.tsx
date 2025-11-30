@@ -16,6 +16,7 @@ interface FilterBarProps {
   onHover: (cat: Category | null) => void;
   onOpenSettings: () => void;
   onOpenAbout: () => void;
+  onOpenPassport: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({
@@ -32,7 +33,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onToggleHeatmap,
   onHover,
   onOpenSettings,
-  onOpenAbout
+  onOpenAbout,
+  onOpenPassport
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showTooltip, setShowTooltip] = useState(true);
@@ -47,7 +49,17 @@ const FilterBar: React.FC<FilterBarProps> = ({
   return (
     <>
       {/* MOBILE: Hamburger Menu (< 768px) */}
-      <div className="md:hidden absolute top-6 right-4 z-50 pointer-events-auto">
+      <div className="md:hidden absolute top-6 right-4 z-50 pointer-events-auto flex items-center gap-3">
+        {/* Passport Button (Mobile) */}
+        <button
+          onClick={onOpenPassport}
+          className="w-10 h-10 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-all"
+          aria-label="Passport"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        </button>
         {/* Tooltip - Only show when menu is closed and timer hasn't expired */}
         {!isMenuOpen && showTooltip && (
           <div className="absolute -bottom-10 right-0 bg-slate-900/95 text-gray-300 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap backdrop-blur-md border border-white/10 shadow-lg pointer-events-none animate-pulse">
@@ -225,6 +237,17 @@ const FilterBar: React.FC<FilterBarProps> = ({
               </div>
 
 
+
+              {/* Passport Button (Tablet) */}
+              <button
+                onClick={onOpenPassport}
+                className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-800 text-gray-400 hover:bg-slate-700 hover:text-white border border-white/10 transition-all duration-300"
+                title="Passport"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </button>
 
               {/* Time Travel Button (Tablet) */}
               <button
