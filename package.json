@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.4",
     "@vercel/postgres": "^0.10.0",
     "d3": "^7.9.0",
+    "dotenv": "^17.2.3",
     "html-to-image": "^1.11.13",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

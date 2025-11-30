@@ -1,5 +1,9 @@
 import { db } from '@vercel/postgres';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { HfInference } from '@huggingface/inference';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
 
 export default async function handler(
     request: VercelRequest,
@@ -42,6 +46,61 @@ export default async function handler(
                 return response.status(400).json({ error: 'Missing required fields' });
             }
 
+            // --- Hugging Face Moderation Start ---
+            console.log("Checking moderation with Hugging Face...");
+            const hfToken = process.env.HUGGING_FACE_TOKEN;
+
+            if (hfToken) {
+                try {
+                    const hf = new HfInference(hfToken);
+
+                    // Using a specialized toxicity model
+                    // 'unitary/toxic-bert' is a popular choice for this
+                    const result = await hf.textClassification({
+                        model: 'unitary/toxic-bert',
+                        inputs: text
+                    });
+
+                    // Result is an array of objects: [{ label: 'toxic', score: 0.9 }, ...]
+                    // We check if any "bad" label has a high score
+                    const threshold = 0.7; // 70% confidence
+                    const flagged = result.filter(item => item.score > threshold);
+
+                    if (flagged.length > 0) {
+                        console.warn("Story flagged by Hugging Face:", flagged);
+
+                        // Map labels to "Shame Reasons"
+                        // Labels from toxic-bert: toxic, severe_toxic, obscene, threat, insult, identity_hate
+                        let reason = "General Naughtiness";
+                        const topFlag = flagged.sort((a, b) => b.score - a.score)[0]; // Get highest score
+                        const label = topFlag.label;
+
+                        if (label === 'obscene') reason = "Too spicy for this map 🌶️";
+                        else if (label === 'identity_hate') reason = "Hate speech is not cool 🚫";
+                        else if (label === 'threat') reason = "Too violent! 💥";
+                        else if (label === 'insult') reason = "Be nice to people! 🤝";
+                        else if (label === 'toxic' || label === 'severe_toxic') reason = "Let's keep it friendly! 😊";
+
+                        return response.status(400).json({
+                            error: 'Story contains inappropriate content and cannot be posted.',
+                            details: reason
+                        });
+                    }
+                    console.log("Content safe.");
+
+                } catch (modError) {
+                    console.error("Moderation API error:", modError);
+                    // Fail closed? Or open? Let's fail closed for safety, but log it.
+                    return response.status(500).json({
+                        error: 'Content moderation failed. Please try again later.',
+                        details: modError instanceof Error ? modError.message : 'Unknown error'
+                    });
+                }
+            } else {
+                console.warn("HUGGING_FACE_TOKEN is missing. Skipping moderation.");
+            }
+            // --- Hugging Face Moderation End ---
+
             const { rows } = await client.sql`
         INSERT INTO stories (category, year, text, lat, lng, city, state, country)
         VALUES (${category}, ${year}, ${text}, ${lat}, ${lng}, ${city}, ${state}, ${country})
@@ -71,12 +130,6 @@ export default async function handler(
         console.error(error);
         return response.status(500).json({ error: 'Internal Server Error' });
     } finally {
-        // client.release() is handled by @vercel/postgres pool usually, but explicit connect() might need release if using raw client. 
-        // db.connect() returns a VercelPoolClient which extends PoolClient.
-        // Actually @vercel/postgres `db` is a VercelPool. `db.connect()` returns a client.
-        // We should probably just use `sql` tag from `@vercel/postgres` directly for simple queries if we don't need transactions, 
-        // but here we are doing multiple things.
-        // Let's stick to the pattern.
         client.release();
     }
 }

@@ -16,6 +16,7 @@ import AboutModal from './components/AboutModal';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import SEO from './components/SEO';
+import ShameScreen from './components/ShameScreen';
 
 interface NewPinState {
   lat: number;
@@ -39,6 +40,8 @@ const App: React.FC = () => {
   // Admin State
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showShameScreen, setShowShameScreen] = useState(false);
+  const [shameReason, setShameReason] = useState<string>('');
   const titleClickRef = useRef<{ count: number; lastClick: number }>({ count: 0, lastClick: 0 });
 
   // Tour State
@@ -177,7 +180,6 @@ const App: React.FC = () => {
     }
   }, [selectedStory, isTourActive]);
 
-
   const handleStoryClick = useCallback((story: Story) => {
     if (isAddingMode) return;
     // If tour is active and user clicks manually, stop the tour
@@ -223,10 +225,24 @@ const App: React.FC = () => {
       } else {
         const errorData = await res.json();
         console.error("Failed to save story", errorData);
-        alert(`Failed to save story: ${errorData.details || errorData.error || 'Unknown error'}`);
+
+        // Remove optimistic story on failure
+        setStories(prev => prev.filter(s => s.id !== tempId));
+        setSelectedStory(null);
+
+        // Show specific error message
+        if (res.status === 400 && errorData.error.includes('inappropriate')) {
+          setShameReason(errorData.details || "Content flagged by AI");
+          setShowShameScreen(true);
+        } else {
+          alert(errorData.details || errorData.error || 'Failed to save story');
+        }
       }
     } catch (e) {
       console.error("Error saving story", e);
+      // Remove optimistic story on failure
+      setStories(prev => prev.filter(s => s.id !== tempId));
+      setSelectedStory(null);
       alert(`Error saving story: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
@@ -371,6 +387,14 @@ const App: React.FC = () => {
 
         {isAdminMode && (
           <AdminDashboard onClose={() => setIsAdminMode(false)} />
+        )}
+
+        {/* Shame Screen */}
+        {showShameScreen && (
+          <ShameScreen
+            reason={shameReason}
+            onClose={() => setShowShameScreen(false)}
+          />
         )}
 
         {/* Background Gradient */}
